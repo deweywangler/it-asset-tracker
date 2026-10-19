@@ -1,0 +1,23 @@
+{
+  "port": 3000,
+  "lowInventory": {
+    "emailAt": 2,
+    "restockedAt": 3,
+    "emailEachDrop": true,
+    "forTile": {
+      "HDMI Cables": { "emailAt": 4, "restockedAt": 6, "emailEachDrop": false },
+      "DP Cables":   { "emailAt": 4, "restockedAt": 6, "emailEachDrop": false }
+    }
+  },
+  "email": {
+    "enabled": false,
+    "host": "smtp.yourcompany.com",
+    "port": 25,
+    "secure": false,
+    "user": "",
+    "pass": "",
+    "from": "IT Asset Tracker <it-notifications@yourcompany.com>",
+    "to": "your.manager@yourcompany.com",
+    "subject": "low inventory"
+  }
+}

@@ -1,0 +1,12 @@
+# Never upload these to GitHub
+
+# Real company data (employee names, serial numbers)
+data/
+*Backup*.json
+*backup*.json
+
+# Server settings (mail server, passwords)
+config.json
+
+# Installed add-ons (recreated by "npm install")
+node_modules/

@@ -1,0 +1,2496 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Asset Tracker</title>
+  <script>
+    // Turn on dark mode right away if it was on last time (remembered per browser)
+    try { if (localStorage.getItem('it_theme') === 'dark') document.documentElement.classList.add('dark'); } catch (e) {}
+  </script>
+  <style>
+    :root {
+      --bg-color: #f4f6f9;
+      --card-bg: #ffffff;
+      --text-main: #1f2937;
+      --text-sub: #6b7280;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --border-color: #e5e7eb;
+      --surface-color: #0284c7;
+      --lenovo-color: #dc2626;
+      --dock-color: #7c3aed;
+      --monitor-color: #059669;
+      --headset-color: #d97706;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      padding: 24px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+
+    /* Top Header Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      background: var(--card-bg);
+      padding: 20px 24px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; color: #111827; }
+
+    /* Company logo above the title */
+    .brand-logo { display: block; height: 62px; width: auto; margin-bottom: 10px; }
+    .logo-for-dark { display: none; }
+    html.dark .logo-for-light { display: none; }
+    html.dark .logo-for-dark { display: block; }
+    .subtitle { font-size: 0.875rem; color: var(--text-sub); margin-top: 4px; }
+
+    .header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    /* ---------- Dark mode on/off switch ---------- */
+    .theme-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin-left: 6px; user-select: none; }
+    .theme-toggle-label { font-size: 0.8rem; font-weight: 600; color: var(--text-sub); }
+    .theme-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .theme-toggle-track {
+      position: relative; width: 46px; height: 26px; border-radius: 999px;
+      background: #d1d5db; transition: background-color 0.2s; flex-shrink: 0;
+    }
+    .theme-toggle-knob {
+      position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+      background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform 0.2s;
+    }
+    .theme-toggle input:checked + .theme-toggle-track { background: var(--primary); }
+    .theme-toggle input:checked + .theme-toggle-track .theme-toggle-knob { transform: translateX(20px); }
+    .theme-toggle input:focus-visible + .theme-toggle-track { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35); }
+
+    /* Shows whether changes are saved to the server */
+    .sync-status { font-size: 0.75rem; margin-top: 6px; color: var(--text-sub); }
+    .sync-status.ok { color: #059669; }
+    .sync-status.saving { color: #d97706; }
+    .sync-status.error { color: #ef4444; font-weight: 600; }
+
+    /* Shown when a new version of the page is waiting to load */
+    .update-banner {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 2000;
+      background: var(--primary); color: #ffffff; padding: 10px 18px; border-radius: 8px;
+      font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    button:hover { background-color: var(--primary-hover); }
+    button.secondary { background-color: #ffffff; color: var(--text-main); border: 1px solid var(--border-color); }
+    button.secondary:hover { background-color: #f9fafb; }
+
+    /* KPI Dashboard */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--card-bg);
+      padding: 16px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .metric-title { font-size: 0.8rem; color: var(--text-sub); font-weight: 500; }
+
+    /* Inventory tiles can be clicked to filter */
+    .metric-card.clickable { position: relative; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+    .metric-card.clickable:hover { border-color: #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .email-status { font-size: 0.8rem; color: var(--text-sub); margin: -12px 0 16px; min-height: 0; }
+    .email-status.error { color: #ef4444; }
+
+    /* Message shown after an item is assigned to someone */
+    .inventory-notice { display: none; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; border-radius: 8px; padding: 10px 14px; font-size: 0.875rem; margin-bottom: 16px; }
+    .inventory-notice.show { display: block; }
+    .prev-owner-hint { font-size: 0.72rem; color: var(--text-sub); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+
+    /* Small ✕ that clears the "Previously:" list on an inventory item */
+    .prev-owner-clear {
+      background: transparent; color: #9ca3af; border: 1px solid var(--border-color);
+      width: 16px; height: 16px; padding: 0; border-radius: 4px;
+      font-size: 0.6rem; line-height: 1; justify-content: center; flex-shrink: 0;
+    }
+    .prev-owner-clear:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
+    html.dark .prev-owner-clear:hover { background: #3b1414; border-color: #7f1d1d; }
+
+    /* Small ✕ in the top-right corner of empty Inventory tiles */
+    .tile-remove-btn {
+      position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; padding: 0;
+      background: transparent; color: #9ca3af; border: none; border-radius: 4px;
+      font-size: 0.75rem; line-height: 1; justify-content: center;
+    }
+    .tile-remove-btn:hover { background: #fee2e2; color: #ef4444; }
+    html.dark .tile-remove-btn:hover { background: #3b1414; }
+
+    /* "+ New Tile" box at the end of the Inventory tiles */
+    .new-tile-card { border: 2px dashed var(--border-color); background: transparent; box-shadow: none; display: flex; flex-direction: column; justify-content: center; }
+    .new-tile-card .metric-title { color: var(--primary); font-weight: 600; font-size: 0.9rem; }
+    .new-tile-hint { font-size: 0.72rem; color: var(--text-sub); margin-top: 4px; }
+
+    .metric-card.selected { border: 2px solid var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    .metric-value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
+
+    /* Search Bar */
+    .controls-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      gap: 16px;
+    }
+
+    .search-input {
+      width: 100%;
+      max-width: 400px;
+      padding: 10px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      outline: none;
+      background: white;
+    }
+
+    .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+
+    /* Main Table */
+    .table-container {
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      overflow-x: auto;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+
+    th {
+      background-color: #f8fafc;
+      padding: 14px 18px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-sub);
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    .header-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .sort-select {
+      padding: 4px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-sub);
+      background-color: white;
+      cursor: pointer;
+      outline: none;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .sort-select:focus { border-color: var(--primary); }
+
+    td { padding: 16px 20px; border-bottom: 1px solid var(--border-color); font-size: 0.95rem; vertical-align: middle; }
+
+    /* Typeable boxes inside table rows (Company / Job Title / Manager and Inventory) */
+    .info-cell { min-width: 170px; }
+
+    /* Dash shown when Company / Job Title / Manager is blank */
+    .empty-value { color: #9ca3af; }
+
+    .inline-input {
+      min-width: 150px;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    tr.employee-row { cursor: pointer; transition: background-color 0.15s; }
+    tr.employee-row:hover { background-color: #f8fafc; }
+    tr.employee-row.active { background-color: #eff6ff; }
+
+    .arrow-icon {
+      display: inline-block;
+      transition: transform 0.2s ease;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #000000;
+    }
+
+    tr.active .arrow-icon { transform: rotate(90deg); }
+
+    /* Inactive Button */
+    .inactive-btn {
+      background-color: #ffffff;
+      color: var(--text-sub);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .inactive-btn:hover { background-color: #f3f4f6; }
+
+    /* Grayed-out row for inactive employees */
+    tr.employee-row.inactive,
+    tr.employee-row.inactive:hover,
+    tr.employee-row.inactive.active {
+      background-color: #e5e7eb;
+    }
+
+    tr.employee-row.inactive td:not(.actions-cell) {
+      color: #9ca3af;
+      opacity: 0.6;
+    }
+
+    tr.employee-row.inactive .inactive-btn {
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+
+    /* Inventory page: remove button */
+    .inventory-delete-btn {
+      background-color: #ffffff;
+      color: #ef4444;
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    .inventory-delete-btn:hover { background-color: #fee2e2; }
+
+    /* Three Dots Menu */
+    .menu-container { position: relative; display: inline-block; }
+
+    .three-dots-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      font-size: 1.25rem;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .three-dots-btn:hover { background-color: #f1f5f9; color: var(--text-main); }
+
+    .action-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 4px;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 100;
+      min-width: 140px;
+      overflow: hidden;
+    }
+
+    .action-dropdown.show { display: block; }
+
+    .action-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.15s;
+    }
+
+    .action-dropdown-item:hover { background-color: #f3f4f6; }
+    .action-dropdown-item.danger { color: #ef4444; }
+    .action-dropdown-item.danger:hover { background-color: #fee2e2; }
+
+    /* Accordion Drawer */
+    .details-row { display: none; background-color: #f9fafb; }
+    .details-row.open { display: table-row; }
+
+    .details-container {
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .card-box {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .card-box h4 {
+      font-size: 0.825rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+    }
+
+    .remove-card-btn {
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+
+    .remove-card-btn:hover { color: #ef4444; background: #fee2e2; }
+
+    /* Card Footer Dropdown Toggle Links */
+    .card-footer-links {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border-color);
+    }
+
+    .card-link {
+      font-size: 0.725rem;
+      color: var(--primary);
+      text-decoration: none;
+      cursor: pointer;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-link:hover { text-decoration: underline; }
+
+    .toggle-arrow {
+      font-size: 0.65rem;
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .toggle-arrow.open { transform: rotate(180deg); }
+
+    /* Expandable Dropdown Sections */
+    .expandable-section {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .expandable-section.open { display: block; }
+
+    .owner-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .owner-row:last-child { margin-bottom: 0; }
+
+    .btn-small-add {
+      background: white;
+      border: 1px solid var(--border-color);
+      color: var(--primary);
+      padding: 4px 8px;
+      font-size: 0.725rem;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+
+    .btn-small-add:hover { background: #eff6ff; }
+
+    .add-card-box {
+      background: #f8fafc;
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 140px;
+      gap: 8px;
+    }
+
+    .form-group { margin-bottom: 10px; }
+    .form-group:last-child { margin-bottom: 0; }
+
+    label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; }
+
+    select, input[type="text"], input[type="date"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      outline: none;
+      background: white;
+    }
+
+    select:focus, input[type="text"]:focus, input[type="date"]:focus { border-color: var(--primary); }
+
+    .actions-cell { text-align: right; white-space: nowrap; }
+
+    .empty-state { text-align: center; padding: 48px; color: var(--text-sub); }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4); display: none; justify-content: center; align-items: center; z-index: 1000;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: white; border-radius: 12px; padding: 24px; width: 100%; max-width: 480px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+    /* ================= DARK MODE ================= */
+    /* White backgrounds become black, dark text becomes white. */
+    html.dark {
+      color-scheme: dark;            /* makes the date pickers and scrollbars dark too */
+      --bg-color: #000000;
+      --card-bg: #121212;
+      --text-main: #f5f5f5;
+      --text-sub: #a3a3a3;
+      --border-color: #2e2e2e;
+    }
+    html.dark h1, html.dark h3, html.dark h4 { color: #ffffff; }
+
+    /* All tile numbers turn white */
+    html.dark .metric-value { color: #ffffff !important; }
+
+    /* Buttons */
+    html.dark button.secondary,
+    html.dark .inactive-btn,
+    html.dark .inventory-delete-btn,
+    html.dark .btn-small-add { background-color: #1a1a1a; color: #f5f5f5; border-color: var(--border-color); }
+    html.dark button.secondary:hover,
+    html.dark .inactive-btn:hover { background-color: #262626; }
+    html.dark .inventory-delete-btn { color: #f87171; }
+    html.dark .inventory-delete-btn:hover { background-color: #3b1414; }
+    html.dark .btn-small-add { color: #60a5fa; }
+    html.dark .btn-small-add:hover { background-color: #172033; }
+
+    /* Typing boxes and dropdowns */
+    html.dark select,
+    html.dark input[type="text"],
+    html.dark input[type="date"],
+    html.dark .search-input,
+    html.dark .sort-select { background-color: #0a0a0a; color: #f5f5f5; border-color: #333333; }
+    html.dark input::placeholder { color: #737373; }
+
+    /* Tables */
+    html.dark th { background-color: #1a1a1a; }
+    html.dark tr.employee-row:hover { background-color: #1a1a1a; }
+    html.dark tr.employee-row.active { background-color: #13213a; }
+    html.dark .arrow-icon { color: #ffffff; }
+    html.dark tr.employee-row.inactive,
+    html.dark tr.employee-row.inactive:hover,
+    html.dark tr.employee-row.inactive.active { background-color: #1f1f1f; }
+    html.dark tr.employee-row.inactive td:not(.actions-cell) { color: #737373; }
+
+    /* Equipment drawer and cards */
+    html.dark .details-row { background-color: #0a0a0a; }
+    html.dark .card-box { background: #121212; }
+    html.dark .expandable-section { background: #1a1a1a; }
+    html.dark .add-card-box { background: #0f0f0f; }
+    html.dark .remove-card-btn:hover { background: #3b1414; }
+
+    /* Menus and pop-ups */
+    html.dark .three-dots-btn:hover { background-color: #262626; color: #ffffff; }
+    html.dark .action-dropdown { background: #1a1a1a; box-shadow: 0 4px 12px rgba(0,0,0,0.6); }
+    html.dark .action-dropdown-item:hover { background-color: #262626; }
+    html.dark .action-dropdown-item.danger:hover { background-color: #3b1414; }
+    html.dark .modal { background: #121212; }
+    html.dark .modal-overlay { background: rgba(0,0,0,0.7); }
+
+    /* Tiles, messages, switch */
+    html.dark .metric-card.clickable:hover { border-color: #404040; }
+    html.dark .inventory-notice { background: #052e1c; color: #a7f3d0; border-color: #065f46; }
+    html.dark .theme-toggle-track { background: #404040; }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- PAGE 1: EMPLOYEES VIEW (the main page)                       -->
+  <!-- ============================================================ -->
+  <div id="employeesView">
+
+    <!-- Top Header Bar -->
+    <header>
+      <div>
+        <!-- Company logo: dark version for light mode, light version for dark mode -->
+        <img class="brand-logo logo-for-light" src="logo-light.png" alt="Brad Hall Companies">
+        <img class="brand-logo logo-for-dark" src="logo-dark.png" alt="Brad Hall Companies">
+        <h1>IT Asset Tracker</h1>
+        <div class="sync-status" id="syncStatus">Connecting to server…</div>
+      </div>
+      <div class="header-actions">
+        <input type="file" id="backupFileInput" accept=".json" multiple style="display: none;" onchange="handleBackupFile(event)" />
+        <input type="file" id="csvFileInput" accept=".csv,.txt" style="display: none;" onchange="handleCSVFile(event)" />
+        
+        <button class="secondary" onclick="triggerFileInput()">
+          📁 Import SharePoint CSV
+        </button>
+        <button class="secondary" onclick="exportToJSON()">
+          💾 Export Backup
+        </button>
+        <button class="secondary" onclick="triggerBackupInput()">
+          📥 Import Backup
+        </button>
+        <button class="secondary" onclick="showInventoryView()">
+          📦 Inventory
+        </button>
+        <button onclick="openAddModal()">
+          + Add Employee
+        </button>
+        <label class="theme-toggle" title="Dark mode">
+          <span class="theme-toggle-label">Dark mode</span>
+          <input type="checkbox" class="theme-toggle-input" onchange="setDarkMode(this.checked)">
+          <span class="theme-toggle-track"><span class="theme-toggle-knob"></span></span>
+        </label>
+      </div>
+    </header>
+
+    <!-- KPI Dashboard -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-title">Total Employees</div>
+        <div class="metric-value" id="metric-total">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Surface Laptops</div>
+        <div class="metric-value" id="metric-surface" style="color: var(--surface-color)">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Lenovo Laptops</div>
+        <div class="metric-value" id="metric-lenovo" style="color: var(--lenovo-color)">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Docks Assigned</div>
+        <div class="metric-value" id="metric-docks" style="color: var(--dock-color)">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Monitors Assigned</div>
+        <div class="metric-value" id="metric-monitors" style="color: var(--monitor-color)">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Headsets Assigned</div>
+        <div class="metric-value" id="metric-headsets" style="color: var(--headset-color)">0</div>
+      </div>
+    </div>
+
+    <!-- Search Filter Input -->
+    <div class="controls-bar">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search employee, company, job title, manager, asset ID, serial numbers, notes..." onkeyup="filterTable()">
+    </div>
+
+    <!-- Main Table View -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50px;"></th>
+            <th>
+              <div class="header-name-cell">
+                <span>Employee Name</span>
+                <select id="sortSelect" class="sort-select" onchange="handleSortChange(this.value)">
+                  <option value="default">Sort: Default</option>
+                  <option value="az">Sort: A-Z</option>
+                  <option value="za">Sort: Z-A</option>
+                </select>
+              </div>
+            </th>
+            <th>Company</th>
+            <th>Job Title</th>
+            <th>Manager</th>
+            <th class="actions-cell">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="assetTableBody">
+          <!-- Rows rendered dynamically -->
+        </tbody>
+      </table>
+      <div id="emptyState" class="empty-state" style="display: none;">
+        <p>No records found. Import a CSV file or add an employee to get started.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- PAGE 2: INVENTORY VIEW (unassigned equipment in the back)    -->
+  <!-- ============================================================ -->
+  <div id="inventoryView" style="display: none;">
+
+    <header>
+      <div>
+        <!-- Company logo (same files as the Employees page) -->
+        <img class="brand-logo logo-for-light" src="logo-light.png" alt="Brad Hall Companies">
+        <img class="brand-logo logo-for-dark" src="logo-dark.png" alt="Brad Hall Companies">
+        <h1>Inventory</h1>
+        <div class="subtitle">Equipment in storage that is not assigned to anyone</div>
+      </div>
+      <div class="header-actions">
+        <button class="secondary" onclick="exportInventoryToJSON()">
+          💾 Export Inventory
+        </button>
+        <button class="secondary" onclick="triggerBackupInput()">
+          📥 Import Backup
+        </button>
+        <button class="secondary" onclick="showEmployeesView()">
+          ← Back to Employees
+        </button>
+        <button onclick="addInventoryItem()">
+          + Add Item
+        </button>
+        <label class="theme-toggle" title="Dark mode">
+          <span class="theme-toggle-label">Dark mode</span>
+          <input type="checkbox" class="theme-toggle-input" onchange="setDarkMode(this.checked)">
+          <span class="theme-toggle-track"><span class="theme-toggle-knob"></span></span>
+        </label>
+      </div>
+    </header>
+
+    <!-- Inventory counts (built automatically by renderInventoryTiles).
+         Click a tile to show only those items; click it again (or "Total") to show everything. -->
+    <div class="metrics-grid" id="inventoryTiles"></div>
+    <div id="emailStatus" class="email-status"></div>
+    <div id="inventoryNotice" class="inventory-notice"></div>
+
+    <!-- Inventory search -->
+    <div class="controls-bar">
+      <input type="text" class="search-input" id="inventorySearch" placeholder="Search equipment type, model, serial number, asset ID, notes..." onkeyup="renderInventory()">
+    </div>
+
+    <!-- Suggestions that appear when typing in the Equipment Type boxes -->
+    <!-- Employee names suggested in the "Assigned To" boxes (filled in by renderInventory) -->
+    <datalist id="employeeNames"></datalist>
+
+    <datalist id="inventoryTypes">
+      <option value="Laptop"></option>
+      <option value="Docking Station"></option>
+      <option value="Monitor"></option>
+      <option value="Headset"></option>
+      <option value="Power Brick"></option>
+      <option value="Webcam"></option>
+      <option value="Keyboard"></option>
+      <option value="Mouse"></option>
+    </datalist>
+
+    <!-- Inventory table -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Equipment Type</th>
+            <th>Model / Description</th>
+            <th>Serial Number</th>
+            <th>Asset ID</th>
+            <th>Notes</th>
+            <th>Assigned To</th>
+            <th class="actions-cell">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="inventoryTableBody">
+          <!-- Rows rendered dynamically -->
+        </tbody>
+      </table>
+      <div id="inventoryEmptyState" class="empty-state" style="display: none;">
+        <p>No inventory items yet. Click "+ Add Item" to add equipment that is in storage.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal: Add New Employee -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add New Employee</h3>
+        <button class="secondary" onclick="closeAddModal()" style="padding: 4px 8px;">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Full Name or Email</label>
+        <input type="text" id="newPersonName" placeholder="e.g. Jane Smith or jane.smith@company.com">
+      </div>
+      <div class="form-group">
+        <label>Company</label>
+        <input type="text" id="newPersonCompany" placeholder="Enter company...">
+      </div>
+      <div class="form-group">
+        <label>Job Title</label>
+        <input type="text" id="newPersonJobTitle" placeholder="Enter job title...">
+      </div>
+      <div class="form-group">
+        <label>Manager</label>
+        <input type="text" id="newPersonManager" placeholder="Enter manager name...">
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeAddModal()">Cancel</button>
+        <button onclick="saveNewPerson()">Save Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Employee Details -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Edit Employee Details</h3>
+        <button class="secondary" onclick="closeEditModal()" style="padding: 4px 8px;">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Employee Name / Display Name</label>
+        <input type="text" id="editPersonName" placeholder="Enter updated name...">
+      </div>
+      <div class="form-group">
+        <label>Company</label>
+        <input type="text" id="editPersonCompany" placeholder="Enter company...">
+      </div>
+      <div class="form-group">
+        <label>Job Title</label>
+        <input type="text" id="editPersonJobTitle" placeholder="Enter job title...">
+      </div>
+      <div class="form-group">
+        <label>Manager</label>
+        <input type="text" id="editPersonManager" placeholder="Enter manager name...">
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeEditModal()">Cancel</button>
+        <button onclick="saveEditedPerson()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Individual Device -->
+  <div class="modal-overlay" id="individualDeviceModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add Equipment Item</h3>
+        <button class="secondary" onclick="closeIndividualDeviceModal()" style="padding: 4px 8px;">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Item Name</label>
+        <input type="text" id="newIndividualDeviceTitle" placeholder="e.g. Laptop Setup, Docking Station, Monitor Setup, Headset, Power Brick, Webcam">
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeIndividualDeviceModal()">Cancel</button>
+        <button onclick="saveIndividualDevice()">Add Item</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let activePersonForCustomItem = null;
+    let activePersonForEdit = null;
+    let openDrawerIds = new Set();
+    let currentSortMode = 'default';
+
+    // Data now comes from the server (see loadFromServer), not from this browser
+    let assets = [];
+    let inventory = [];
+    let knownTiles = {};
+    let tileNames = {};    // names typed in "+ New Tile" (these always win)   // every inventory tile ever seen (kept by the server) so tiles stay on screen at 0
+
+    // ---------- Dark mode ----------
+    function setDarkMode(on) {
+      document.documentElement.classList.toggle('dark', on);
+      // Keep both switches (Employees page and Inventory page) in step
+      document.querySelectorAll('.theme-toggle-input').forEach(cb => { cb.checked = on; });
+      try { localStorage.setItem('it_theme', on ? 'dark' : 'light'); } catch (e) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setDarkMode(document.documentElement.classList.contains('dark'));
+      loadFromServer().then(() => renderTable());
+      connectLive();                            // coworkers' changes show up instantly
+      setInterval(() => {                       // backup check once a minute, in case the live connection drops
+        if (syncFailed && hasUnsavedChanges()) { syncToServer(); return; }
+        pendingRefresh = true;
+        applyPendingUpdates();
+      }, 60000);
+      setInterval(applyPendingUpdates, 1500);   // applies updates that waited while you were typing
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.menu-container')) {
+          closeAllDropdowns();
+        }
+      });
+    });
+
+    function triggerFileInput() {
+      const input = document.getElementById('csvFileInput');
+      input.value = '';
+      input.click();
+    }
+
+    function saveData() {
+      scheduleSync();
+      updateMetrics();
+    }
+
+    // ================== SAVING TO THE SERVER ==================
+    // Remembers what the server last had for each record. On save, only records that
+    // actually changed are sent, so two people editing different employees don't overwrite each other.
+    const syncedCopy = { assets: new Map(), inventory: new Map() };
+    let syncTimer = null;
+    let syncing = false;
+    let syncFailed = false;
+
+    function setSyncStatus(text, kind) {
+      const el = document.getElementById('syncStatus');
+      if (!el) return;
+      el.textContent = text;
+      el.className = 'sync-status ' + (kind || '');
+    }
+
+    function rememberSynced(kind, list) {
+      syncedCopy[kind] = new Map(list.map(r => [String(r.id), JSON.stringify(r)]));
+    }
+
+    function hasUnsavedChanges() {
+      if (syncing || syncTimer) return true;
+      return ['assets', 'inventory'].some(kind => {
+        const list = kind === 'assets' ? assets : inventory;
+        if (list.length !== syncedCopy[kind].size) return true;
+        return list.some(r => syncedCopy[kind].get(String(r.id)) !== JSON.stringify(r));
+      });
+    }
+
+    // A random id for this open page, so it can ignore "data changed" messages caused by its own saves
+    const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+    async function api(method, url, body) {
+      const headers = { 'X-Client-Id': CLIENT_ID };
+      if (body !== undefined) headers['Content-Type'] = 'application/json';
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: body !== undefined ? body : undefined,
+        cache: 'no-store'
+      });
+      if (!res.ok) { const err = new Error(`Server said ${res.status}`); err.status = res.status; throw err; }
+      return res.json();
+    }
+
+    async function loadFromServer() {
+      try {
+        const data = await api('GET', '/api/data');
+        assets = data.assets || [];
+        inventory = data.inventory || [];
+        knownTiles = data.knownTiles || {};
+        tileNames = data.tileNames || {};
+        assets.forEach(normalizeDeviceData);
+        rememberSynced('assets', assets);
+        rememberSynced('inventory', inventory);
+        syncFailed = false;
+        setSyncStatus('✓ Live — all changes saved', 'ok');
+      } catch (e) {
+        console.error(e);
+        setSyncStatus('⚠ Cannot reach the tracker server. Nothing can be saved right now.', 'error');
+        syncFailed = true;
+      }
+    }
+
+    // Waits a moment after a change, then sends everything that changed in one go
+    function scheduleSync() {
+      clearTimeout(syncTimer);
+      setSyncStatus('Saving…', 'saving');
+      syncTimer = setTimeout(() => { syncTimer = null; syncToServer(); }, 300);
+    }
+
+    async function syncList(kind, list) {
+      const current = new Map(list.map(r => [String(r.id), JSON.stringify(r)]));
+      const jobs = [];
+      current.forEach((json, id) => {
+        const prevJson = syncedCopy[kind].get(id);
+        if (prevJson === json) return;
+        if (prevJson === undefined) {
+          // Brand-new record: send all of it
+          jobs.push(api('PUT', `/api/${kind}/${encodeURIComponent(id)}`, json)
+            .then(() => syncedCopy[kind].set(id, json)));
+          return;
+        }
+        // Existing record: send only the boxes that changed
+        const prev = JSON.parse(prevJson), cur = JSON.parse(json);
+        const changes = {};
+        Object.keys(cur).forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(prev[k])) changes[k] = cur[k]; });
+        const removed = Object.keys(prev).filter(k => !(k in cur));
+        jobs.push(api('PATCH', `/api/${kind}/${encodeURIComponent(id)}`, JSON.stringify({ changes, removed }))
+          .then(() => syncedCopy[kind].set(id, json))
+          .catch(err => {
+            if (err.status !== 404) throw err;
+            // Someone else deleted this record; drop it here too on the next refresh
+            syncedCopy[kind].delete(id);
+            pendingRefresh = true;
+          }));
+      });
+      syncedCopy[kind].forEach((json, id) => {
+        if (!current.has(id)) {
+          jobs.push(api('DELETE', `/api/${kind}/${encodeURIComponent(id)}`)
+            .then(() => syncedCopy[kind].delete(id)));
+        }
+      });
+      await Promise.all(jobs);
+    }
+
+    async function syncToServer() {
+      if (syncing) { scheduleSync(); return; }
+      syncing = true;
+      try {
+        await syncList('assets', assets);
+        await syncList('inventory', inventory);
+        syncFailed = false;
+        setSyncStatus('✓ All changes saved', 'ok');
+      } catch (e) {
+        console.error(e);
+        syncFailed = true;
+        setSyncStatus('⚠ Not saved — cannot reach the server. Keep this page open; it will retry.', 'error');
+      } finally {
+        syncing = false;
+      }
+    }
+
+    // Every 20 seconds: retry failed saves, or load coworkers' changes.
+    // Skips the refresh while you're typing or have a pop-up open, so your work isn't interrupted.
+    // Live updates wait while you're actively typing (any key in the last 4 seconds)
+    // or have a pop-up or menu open, so nothing changes under your cursor.
+    let lastTyped = 0;
+    document.addEventListener('keydown', () => { lastTyped = Date.now(); }, true);
+    document.addEventListener('input', () => { lastTyped = Date.now(); }, true);
+
+    function userIsBusy() {
+      const popupOpen = document.querySelector('.modal-overlay.active');
+      const menuOpen = document.querySelector('.action-dropdown.show');
+      return Date.now() - lastTyped < 4000 || popupOpen || menuOpen;
+    }
+
+    // ---------- Live updates ----------
+    let pendingRefresh = false;
+    let pendingReload = false;
+
+    function connectLive() {
+      if (typeof EventSource === 'undefined') return;   // very old browser: the once-a-minute check still works
+      const live = new EventSource('/api/events');
+      live.addEventListener('open', () => { pendingRefresh = true; applyPendingUpdates(); });   // (re)connected: catch up
+      live.addEventListener('data', e => {
+        let info = {};
+        try { info = JSON.parse(e.data); } catch (err) {}
+        if (info.by === CLIENT_ID) return;   // our own save, nothing new to load
+        pendingRefresh = true;
+        applyPendingUpdates();
+      });
+      live.addEventListener('code', () => {
+        pendingReload = true;
+        showUpdateBanner();
+        applyPendingUpdates();
+      });
+    }
+
+    function showUpdateBanner() {
+      let banner = document.getElementById('updateBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'updateBanner';
+        banner.className = 'update-banner';
+        banner.textContent = '⟳ A new version of the tracker is ready. It will load as soon as you finish what you are typing.';
+        document.body.appendChild(banner);
+      }
+    }
+
+    function applyPendingUpdates() {
+      if (!pendingRefresh && !pendingReload) return;
+      if (userIsBusy()) return;   // try again shortly
+
+      // Cursor left sitting in a box? Save what's in it first (search boxes don't need saving)
+      const el = document.activeElement;
+      if (el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) && el.type !== 'file'
+          && el.id !== 'searchInput' && el.id !== 'inventorySearch') {
+        el.blur();
+        return;   // the save runs now; the update applies on the next try
+      }
+      if (hasUnsavedChanges()) return;
+
+      if (pendingReload) { location.reload(); return; }
+      pendingRefresh = false;
+      refreshFromServer();
+    }
+
+    async function refreshFromServer() {
+      let data;
+      try {
+        data = await api('GET', '/api/data');
+      } catch (e) {
+        setSyncStatus('⚠ Cannot reach the tracker server. Nothing can be saved right now.', 'error');
+        syncFailed = true;
+        return;
+      }
+      // If you started editing while it was loading, keep your edit and try again shortly
+      if (hasUnsavedChanges() || userIsBusy()) { pendingRefresh = true; return; }
+
+      const before = JSON.stringify([assets, inventory, knownTiles, tileNames]);
+      assets = data.assets || [];
+      inventory = data.inventory || [];
+      knownTiles = data.knownTiles || {};
+      tileNames = data.tileNames || {};
+      assets.forEach(normalizeDeviceData);
+      rememberSynced('assets', assets);
+      rememberSynced('inventory', inventory);
+      syncFailed = false;
+      setSyncStatus('✓ Live — all changes saved', 'ok');
+      if (JSON.stringify([assets, inventory, knownTiles, tileNames]) === before) return;
+
+      if (document.getElementById('inventoryView').style.display === 'block') renderInventory();
+      else renderTable();
+    }
+
+    // ---------- Import a backup file (from "Export Backup" or "Export Inventory") ----------
+    function triggerBackupInput() {
+      const input = document.getElementById('backupFileInput');
+      input.value = '';
+      input.click();
+    }
+
+    // Reads any tracker backup file:
+    //  - Full backup (from the new "Export Backup"): employees AND inventory in one file
+    //  - Older employee backup or inventory backup files
+    // Several files can be picked at once; the newest file wins if the same record is in more than one.
+    function readBackupRecords(parsed) {
+      const found = { employees: [], inventory: [], skipped: 0 };
+      const sortRecord = r => {
+        if (!r || typeof r !== 'object' || r.id === undefined || r.id === null) { found.skipped++; return; }
+        if ('name' in r) found.employees.push(r);
+        else if (['type', 'model', 'sn', 'assetID', 'notes'].some(k => k in r)) found.inventory.push(r);
+        else found.skipped++;
+      };
+      if (Array.isArray(parsed)) parsed.forEach(sortRecord);
+      else if (parsed && typeof parsed === 'object') {
+        (Array.isArray(parsed.assets) ? parsed.assets : []).forEach(sortRecord);
+        (Array.isArray(parsed.inventory) ? parsed.inventory : []).forEach(sortRecord);
+      }
+      return found;
+    }
+
+    function handleBackupFile(event) {
+      const files = [...event.target.files].sort((a, b) => a.lastModified - b.lastModified);   // oldest first, newest last
+      if (files.length === 0) return;
+
+      Promise.all(files.map(file => file.text().then(text => {
+        let parsed;
+        try { parsed = JSON.parse(text); } catch (e) { return { file, error: 'not a backup file' }; }
+        return { file, ...readBackupRecords(parsed) };
+      }))).then(results => {
+        // Combine everything; later (newer) files replace earlier ones with the same id
+        const employees = new Map(), items = new Map();
+        const lines = results.map(r => {
+          if (r.error) return `• ${r.file.name}: ${r.error}`;
+          r.employees.forEach(e => employees.set(String(e.id), e));
+          r.inventory.forEach(i => items.set(String(i.id), i));
+          if (r.employees.length === 0 && r.inventory.length === 0) return `• ${r.file.name}: EMPTY (nothing in it)`;
+          const parts = [];
+          if (r.employees.length) parts.push(`${r.employees.length} employees`);
+          if (r.inventory.length) parts.push(`${r.inventory.length} inventory items`);
+          return `• ${r.file.name}: ${parts.join(', ')}`;
+        });
+
+        if (employees.size === 0 && items.size === 0) {
+          return alert(`Nothing to import.\n\n${lines.join('\n')}\n\nIf a file says EMPTY, it was exported from a browser that had no data saved. Open the tracker where your data shows up, export again, and import that new file.`);
+        }
+
+        const replaced = [...employees.keys()].filter(id => assets.some(a => String(a.id) === id)).length
+                       + [...items.keys()].filter(id => inventory.some(i => String(i.id) === id)).length;
+        let msg = `Files found:\n${lines.join('\n')}\n\nImport ${employees.size} employees and ${items.size} inventory items?`;
+        if (replaced) msg += `\n\n${replaced} of these already exist here and will be replaced with the version from the file.`;
+        if (!confirm(msg)) return;
+
+        employees.forEach((rec, id) => {
+          const i = assets.findIndex(a => String(a.id) === id);
+          if (i === -1) assets.push(rec); else assets[i] = rec;
+        });
+        items.forEach((rec, id) => {
+          const i = inventory.findIndex(t => String(t.id) === id);
+          if (i === -1) inventory.push(rec); else inventory[i] = rec;
+        });
+        assets.forEach(normalizeDeviceData);
+        saveData();
+        saveInventory();
+        if (document.getElementById('inventoryView').style.display === 'block') renderInventory(); else renderTable();
+        alert(`Done! Imported ${employees.size} employees and ${items.size} inventory items.`);
+      });
+    }
+
+    // ---------- Switching between the two pages ----------
+    function showInventoryView() {
+      closeAllDropdowns();
+      document.getElementById('employeesView').style.display = 'none';
+      document.getElementById('inventoryView').style.display = 'block';
+      renderInventory();
+      window.scrollTo(0, 0);
+    }
+
+    function showEmployeesView() {
+      document.getElementById('inventoryView').style.display = 'none';
+      document.getElementById('employeesView').style.display = 'block';
+      renderTable();
+      window.scrollTo(0, 0);
+    }
+
+    // ---------- Inventory page ----------
+    function saveInventory() {
+      scheduleSync();
+      updateInventoryMetrics();
+    }
+
+    // ================== LOW INVENTORY EMAIL ==================
+    // The page sends the tile counts to the server; the server decides whether to email
+    // (settings are in config.json on the server).
+    function showEmailStatus(message, isError) {
+      const el = document.getElementById('emailStatus');
+      if (!el) return;
+      el.textContent = message;
+      el.className = 'email-status' + (isError ? ' error' : '');
+    }
+
+    let lastTileCounts = '';
+    function checkLowInventory(tileCounts) {
+      const payload = tileCounts.map(t => ({ key: t.key, label: t.label, count: t.count }));
+      const signature = JSON.stringify(payload);
+      if (signature === lastTileCounts) return;   // counts haven't changed, nothing to check
+      lastTileCounts = signature;
+
+      api('POST', '/api/low-inventory', JSON.stringify({ tiles: payload }))
+        .then(result => {
+          if (result.sent && result.sent.length) showEmailStatus(`📧 Low inventory email sent for: ${result.sent.join(', ')}`);
+          else if (result.error) showEmailStatus('⚠️ Low inventory email could not be sent. Ask IT to check the mail settings in config.json.', true);
+        })
+        .catch(() => { lastTileCounts = ''; });   // server unreachable; try again next time
+    }
+
+    // Which tile is currently selected on the Inventory page (null = show everything)
+    let inventoryFilter = null;
+
+    // The four tiles that always show
+    const BASE_INVENTORY_TILES = [
+      { key: 'laptop',  label: 'Laptops',  color: 'var(--surface-color)' },
+      { key: 'dock',    label: 'Docks',    color: 'var(--dock-color)' },
+      { key: 'monitor', label: 'Monitors', color: 'var(--monitor-color)' },
+      { key: 'headset', label: 'Headsets', color: 'var(--headset-color)' }
+    ];
+
+    // Custom tile names. Left side = the word to look for (lowercase, singular),
+    // right side = the name shown on the tile.
+    // A tile listed here appears whenever that word is in ANY item's Equipment Type
+    // OR Model / Description. To add your own, copy a line and change both sides,
+    // e.g.  brick: 'Power Bricks',
+    const TILE_LABELS = {
+      strip: 'Power Strips',
+    };
+
+    // Colors used for new tiles that get created automatically (Cables, Webcams, etc.)
+    const EXTRA_TILE_COLORS = ['#0891b2', '#be185d', '#4d7c0f', '#9333ea', '#b45309', '#475569'];
+
+    // Makes one word singular: "cables" -> "cable", "batteries" -> "battery", "mice" -> "mouse"
+    function singularWord(word) {
+      if (word === 'mice') return 'mouse';
+      if (word.endsWith('ies') && word.length > 4) return word.slice(0, -3) + 'y';
+      if (word.endsWith('s') && !word.endsWith('ss') && word.length > 3) return word.slice(0, -1);
+      return word;
+    }
+
+    // Turns the WHOLE Equipment Type into a tile keyword, so each specific type gets its own tile.
+    // "DP Cables" -> "dp cable", "HDMI Cable" -> "hdmi cable", "Webcam" -> "webcam"
+    function getTileKeyword(type) {
+      const words = (type || '').trim().toLowerCase().split(/\s+/).filter(w => w);
+      if (words.length === 0) return '';
+      words[words.length - 1] = singularWord(words[words.length - 1].replace(/[^a-z0-9-]/g, ''));
+      return words.join(' ');
+    }
+
+    // Builds a tile title from the Equipment Type as you typed it, making the last word plural.
+    // "DP Cable" -> "DP Cables", "HDMI Cables" -> "HDMI Cables", "power brick" -> "Power Bricks"
+    function getTileLabelFromType(type) {
+      // Combined items like "Keyboard + Mouse" or "Keyboard & Mouse" keep their name as typed
+      if (/[+&\/]|\band\b/i.test(type || '')) {
+        return (type || '').trim().replace(/\s+/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+      const words = (type || '').trim().split(/\s+/).filter(w => w);
+      const last = singularWord(words.pop().toLowerCase().replace(/[^a-z0-9-]/g, ''));
+      words.push(getTileLabel(last));
+      return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    // Turns a keyword into a tile title: "cable" -> "Cables", "mouse" -> "Mice"
+    function getTileLabel(keyword) {
+      let plural;
+      if (keyword === 'mouse') plural = 'mice';
+      else if (/[^aeiou]y$/.test(keyword)) plural = keyword.slice(0, -1) + 'ies';
+      else if (/(s|x|ch|sh)$/.test(keyword)) plural = keyword + 'es';
+      else plural = keyword + 's';
+      return plural.charAt(0).toUpperCase() + plural.slice(1);
+    }
+
+    // An item belongs to a tile if the keyword is in its Equipment Type OR its Model / Description
+    function itemMatchesTile(item, keyword) {
+      const text = ((item.type || '') + ' ' + (item.model || '')).toLowerCase().replace(/\s+/g, ' ');
+      return text.includes(keyword);
+    }
+
+    // Builds the list of tiles: the 4 standard ones, plus one for each new Equipment Type
+    function getInventoryTiles() {
+      const tiles = BASE_INVENTORY_TILES.map(t => ({ ...t }));
+      const nextColor = () => EXTRA_TILE_COLORS[(tiles.length - BASE_INVENTORY_TILES.length) % EXTRA_TILE_COLORS.length];
+
+      // Custom-named tiles: show when the word is in any item's Equipment Type or Model / Description
+      Object.keys(TILE_LABELS).forEach(keyword => {
+        if (tiles.some(t => t.key === keyword)) return;
+        if (inventory.some(item => itemMatchesTile(item, keyword))) {
+          tiles.push({ key: keyword, label: TILE_LABELS[keyword], color: nextColor() });
+        }
+      });
+
+      inventory.forEach(item => {
+        const type = (item.type || '').toLowerCase();
+        if (!type.trim()) return;
+        // Already covered by an existing tile? (e.g. "Docking Station" is covered by Docks)
+        if (tiles.some(t => type.includes(t.key))) return;
+        const keyword = getTileKeyword(item.type);
+        if (!keyword) return;
+        tiles.push({
+          key: keyword,
+          label: TILE_LABELS[keyword] || tileNames[keyword] || getTileLabelFromType(item.type),
+          color: nextColor()
+        });
+      });
+
+      // Tiles for equipment you've had before but are out of now: keep showing them, at 0
+      Object.keys(knownTiles).forEach(key => {
+        if (tiles.some(t => t.key === key)) return;
+        tiles.push({ key: key, label: tileNames[key] || knownTiles[key], color: nextColor() });
+      });
+      return tiles;
+    }
+
+    function updateInventoryMetrics() {
+      const tiles = getInventoryTiles();
+
+      // If the selected tile no longer exists (its items were removed), go back to showing everything
+      if (inventoryFilter && !tiles.some(t => t.key === inventoryFilter)) inventoryFilter = null;
+
+      // Count each tile once, then use the counts for both the tiles and the low-inventory check
+      tiles.forEach(t => { t.count = inventory.filter(i => itemMatchesTile(i, t.key)).length; });
+      checkLowInventory(tiles);
+
+      const container = document.getElementById('inventoryTiles');
+      container.innerHTML = `
+        <div class="metric-card clickable ${inventoryFilter === null ? 'selected' : ''}" onclick="setInventoryFilter(null)" title="Show all items">
+          <div class="metric-title">Total Items in Stock</div>
+          <div class="metric-value">${inventory.length}</div>
+        </div>
+      ` + tiles.map(t => `
+        <div class="metric-card clickable ${inventoryFilter === t.key ? 'selected' : ''}" onclick="setInventoryFilter(${escapeHtml(JSON.stringify(t.key))})" title="Show only ${escapeHtml(t.label)}">
+          ${t.count === 0 && !BASE_INVENTORY_TILES.some(b => b.key === t.key)
+            ? `<button type="button" class="tile-remove-btn" title="Remove this tile" onclick="event.stopPropagation(); removeInventoryTile(${escapeHtml(JSON.stringify(t.key))}, ${escapeHtml(JSON.stringify(t.label))})">✕</button>`
+            : ''}
+          <div class="metric-title">${escapeHtml(t.label)}</div>
+          <div class="metric-value" style="color: ${t.color}">${t.count}</div>
+        </div>
+      `).join('') + `
+        <div class="metric-card clickable new-tile-card" onclick="addInventoryTile()" title="Add a tile for equipment you don't have in stock yet">
+          <div class="metric-title">+ New Tile</div>
+          <div class="new-tile-hint">Shows 0 until items are added</div>
+        </div>
+      `;
+    }
+
+    // "+ New Tile": creates a tile for equipment you don't have yet, so it shows 0
+    function addInventoryTile() {
+      const name = (prompt('Name for the new tile (for example: Keyboard + Mouse).\n\nWhen you add these items later, type this same name in the Equipment Type box so they count here.') || '').trim();
+      if (!name) return;
+      if (name.length > 60) return alert('Please use a shorter name (60 characters or fewer).');
+      const key = getTileKeyword(name);
+      if (!key) return alert('Please type a name with letters or numbers.');
+      const existing = getInventoryTiles().find(t => t.key === key || t.label.toLowerCase() === name.toLowerCase());
+      if (existing) return alert(`There's already a "${existing.label}" tile.`);
+      api('POST', '/api/tiles', JSON.stringify({ key: key, label: name }))
+        .then(() => { knownTiles[key] = name; tileNames[key] = name; renderInventory(); })
+        .catch(() => alert('Could not add the tile. Check that the tracker is running, then try again.'));
+    }
+
+    // ✕ on an empty tile: removes it for everyone
+    function removeInventoryTile(key, label) {
+      if (inventory.some(i => itemMatchesTile(i, key))) {
+        return alert(`"${label}" still has items in Inventory, so it can't be removed.`);
+      }
+      if (!confirm(`Remove the "${label}" tile?\n\nIt will come back on its own if you add an item with that Equipment Type later.`)) return;
+      api('POST', '/api/tiles/delete', JSON.stringify({ key: key }))
+        .then(() => {
+          delete knownTiles[key];
+          delete tileNames[key];
+          if (inventoryFilter === key) inventoryFilter = null;
+          renderInventory();
+        })
+        .catch(err => alert(err.status === 409
+          ? `"${label}" still has items in Inventory, so it can't be removed.`
+          : 'Could not remove the tile. Check that the tracker is running, then try again.'));
+    }
+
+    // Clicking a tile shows only that kind of item. Clicking the same tile again shows everything.
+    function setInventoryFilter(keyword) {
+      inventoryFilter = (keyword === null || inventoryFilter === keyword) ? null : keyword;
+      renderInventory();
+    }
+
+    function addInventoryItem() {
+      // Clear the search box and tile filter so the new blank row is not hidden
+      document.getElementById('inventorySearch').value = '';
+      inventoryFilter = null;
+      inventory.unshift({ id: Date.now(), type: '', model: '', sn: '', assetID: '', notes: '' });
+      saveInventory();
+      renderInventory();
+      const firstInput = document.querySelector('#inventoryTableBody input');
+      if (firstInput) firstInput.focus();
+    }
+
+    function updateInventoryField(id, key, value) {
+      const item = inventory.find(i => i.id === id);
+      if (item) {
+        item[key] = value;
+        saveInventory();
+      }
+    }
+
+    // ---------- Assign an inventory item to an employee ----------
+    // Moves the item out of Inventory and onto the employee's equipment cards,
+    // copying model, serial number, asset ID and notes, with today's date as Date Assigned.
+    function assignInventoryItem(itemId, inputEl) {
+      const typedName = inputEl.value.trim();
+      if (!typedName) return;
+      const item = inventory.find(i => i.id === itemId);
+      if (!item) return;
+
+      const matches = assets.filter(a => a.name.trim().toLowerCase() === typedName.toLowerCase());
+      if (matches.length === 0) {
+        alert(`There is no employee named "${typedName}" on the Employees page.\n\nCheck the spelling (pick a name from the suggestions), or add them on the Employees page first.`);
+        inputEl.value = '';
+        return;
+      }
+      if (matches.length > 1) {
+        alert(`There are ${matches.length} employees named "${typedName}". Rename one of them on the Employees page (Edit Details) so each name is different, then try again.`);
+        inputEl.value = '';
+        return;
+      }
+      const person = matches[0];
+      normalizeDeviceData(person);
+
+      const itemLabel = [item.type, item.model].filter(v => v && v.trim()).join(' – ') || 'this item';
+      let question = `Assign ${itemLabel}${item.sn ? ' (SN ' + item.sn + ')' : ''} to ${person.name}?\n\nIt will be removed from Inventory and added to their equipment with today's date.`;
+      if (person.inactive) question += `\n\nNote: ${person.name} is marked Inactive.`;
+      if (!confirm(question)) { inputEl.value = ''; return; }
+
+      const today = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local time
+      const modelText = (item.model || '').trim() || (item.type || '').trim();
+      const typeText = ((item.type || '') + ' ' + (item.model || '')).toLowerCase();
+
+      // Which standard card does this belong on? (Laptop, Docking Station, Monitor, Headset)
+      const standard = ['laptop', 'dock', 'monitor', 'headset'].find(k => typeText.includes(k));
+      const flag = standard ? 'show' + standard.charAt(0).toUpperCase() + standard.slice(1) : null;
+      const cardIsFree = standard && (
+        !person[flag] ||
+        (!(person[standard] || '').trim() || person[standard] === 'Unassigned') &&
+        !(person[`${standard}SN`] || '').trim() && !(person[`${standard}AssetID`] || '').trim()
+      );
+
+      let placedOn;
+      if (cardIsFree) {
+        // Fill the employee's main card for this type
+        person[flag] = true;
+        person[standard] = modelText;
+        person[`${standard}SN`] = item.sn || '';
+        person[`${standard}AssetID`] = item.assetID || '';
+        person[`${standard}Notes`] = item.notes || '';
+        person[`${standard}DateAssigned`] = today;
+        person[`${standard}Cost`] = item.cost || '';
+        person[`${standard}PrevOwners`] = [...(item.prevOwners || [])];
+        placedOn = { laptop: 'Laptop Setup', dock: 'Docking Station', monitor: 'Monitor Setup', headset: 'Headset' }[standard] + ' card';
+      } else {
+        // Main card already in use (or not a standard type): add an extra card
+        const title = (item.type || '').trim() || (item.model || '').trim() || 'Equipment';
+        person.customItems.push({
+          title: title,
+          model: (item.model || '').trim(),
+          sn: item.sn || '',
+          assetID: item.assetID || '',
+          dateAssigned: today,
+          cost: item.cost || '',
+          notes: item.notes || '',
+          prevOwners: [...(item.prevOwners || [])]
+        });
+        placedOn = `new "${title}" card`;
+      }
+
+      inventory = inventory.filter(i => i.id !== itemId);
+      openDrawerIds.add(person.id);   // their row will be open when you go back to Employees
+      saveData();
+      saveInventory();
+      renderInventory();
+
+      const notice = document.getElementById('inventoryNotice');
+      notice.textContent = `✓ ${itemLabel} assigned to ${person.name} (${placedOn}, dated ${today}). It has been removed from Inventory.`;
+      notice.classList.add('show');
+      clearTimeout(notice._timer);
+      notice._timer = setTimeout(() => notice.classList.remove('show'), 8000);
+    }
+
+    // Clears the "Previously:" list on one inventory item
+    function clearInventoryPrevOwners(id) {
+      const item = inventory.find(i => i.id === id);
+      if (!item) return;
+      if (!confirm(`Clear the previous owner history (${(item.prevOwners || []).join(', ')}) for this item?`)) return;
+      item.prevOwners = [];
+      saveInventory();
+      renderInventory();
+    }
+
+    // Cost / Value box: puts a "$" in front as soon as you start typing
+    function addDollarSign(el) {
+      const v = el.value;
+      if (v === '' || v.startsWith('$')) return;
+      const caret = el.selectionStart;
+      el.value = '$' + v.replace(/\$/g, '');
+      el.setSelectionRange(caret + 1, caret + 1);   // keep the cursor where you were typing
+    }
+
+    // Saves an empty box if only the "$" is left
+    function cleanCost(el) {
+      const v = el.value.trim();
+      if (v === '$') { el.value = ''; return ''; }
+      return v;
+    }
+
+    function deleteInventoryItem(id) {
+      if (confirm("Are you sure you want to remove this item from inventory?")) {
+        inventory = inventory.filter(i => i.id !== id);
+        saveInventory();
+        renderInventory();
+      }
+    }
+
+    function renderInventory() {
+      const query = document.getElementById('inventorySearch').value.toLowerCase().trim();
+      const tbody = document.getElementById('inventoryTableBody');
+      const emptyState = document.getElementById('inventoryEmptyState');
+
+      // Employee names for the "Assigned To" suggestions (active employees first)
+      const names = [...assets].sort((a, b) => (a.inactive ? 1 : 0) - (b.inactive ? 1 : 0) || a.name.localeCompare(b.name));
+      document.getElementById('employeeNames').innerHTML =
+        names.map(a => `<option value="${escapeHtml(a.name)}">${a.inactive ? 'Inactive' : ''}</option>`).join('');
+      tbody.innerHTML = '';
+
+      updateInventoryMetrics();
+
+      if (inventory.length === 0) {
+        emptyState.innerHTML = '<p>No inventory items yet. Click "+ Add Item" to add equipment that is in storage.</p>';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      const visibleItems = inventory.filter(i => {
+        if (inventoryFilter && !itemMatchesTile(i, inventoryFilter)) return false;
+        if (!query) return true;
+        return [i.type, i.model, i.sn, i.assetID, i.notes, ...(i.prevOwners || [])].some(v => (v || '').toLowerCase().includes(query));
+      });
+
+      if (visibleItems.length === 0) {
+        emptyState.innerHTML = inventoryFilter
+          ? '<p>No items match this tile. Click "Total Items in Stock" to show everything.</p>'
+          : '<p>No inventory items match your search.</p>';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+
+      visibleItems.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="info-cell">
+            <input type="text" class="inline-input" list="inventoryTypes" value="${escapeHtml(item.type || '')}" placeholder="Type equipment..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'type', this.value)">
+          </td>
+          <td class="info-cell">
+            <input type="text" class="inline-input" value="${escapeHtml(item.model || '')}" placeholder="Type model..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'model', this.value)">
+          </td>
+          <td class="info-cell">
+            <input type="text" class="inline-input" value="${escapeHtml(item.sn || '')}" placeholder="Type serial number..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'sn', this.value)">
+          </td>
+          <td class="info-cell">
+            <input type="text" class="inline-input" value="${escapeHtml(item.assetID || '')}" placeholder="Type asset ID..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'assetID', this.value)">
+          </td>
+          <td class="info-cell">
+            <input type="text" class="inline-input" value="${escapeHtml(item.notes || '')}" placeholder="Type notes..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'notes', this.value)">
+          </td>
+          <td class="info-cell">
+            <input type="text" class="inline-input" list="employeeNames" value="" placeholder="Type employee name..." onkeydown="if(event.key==='Enter') this.blur()" onchange="assignInventoryItem(${item.id}, this)">
+            ${(item.prevOwners || []).length ? `<div class="prev-owner-hint">Previously: ${escapeHtml(item.prevOwners.join(', '))}<button type="button" class="prev-owner-clear" title="Clear previous owners" onclick="clearInventoryPrevOwners(${item.id})">✕</button></div>` : ''}
+          </td>
+          <td class="actions-cell">
+            <button class="inventory-delete-btn" onclick="deleteInventoryItem(${item.id})">🗑️ Remove</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // Downloads data as a .json file with the date and time in its name,
+    // e.g. IT_Inventory_Backup_2026-10-16_1432.json, so every export is easy to tell apart
+    function downloadJSON(data, baseName) {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${baseName}_${stamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+
+    // Inventory only
+    function exportInventoryToJSON() {
+      downloadJSON(inventory, 'IT_Inventory_Backup');
+    }
+
+    // ---------- Employees page ----------
+    function closeAllDropdowns() {
+      document.querySelectorAll('.action-dropdown').forEach(el => el.classList.remove('show'));
+    }
+
+    function toggleActionMenu(event, id) {
+      event.stopPropagation();
+      const currentDropdown = document.getElementById(`menu-${id}`);
+      const isCurrentlyShown = currentDropdown.classList.contains('show');
+      
+      closeAllDropdowns();
+
+      if (!isCurrentlyShown) {
+        currentDropdown.classList.add('show');
+      }
+    }
+
+    // Mark an employee as inactive (grays out the row) or reactivate them
+    function toggleInactive(event, id) {
+      event.stopPropagation();
+      const asset = assets.find(a => a.id === id);
+      if (asset) {
+        asset.inactive = !asset.inactive;
+        saveData();
+        renderTable();
+      }
+    }
+
+    function handleSortChange(val) {
+      currentSortMode = val;
+      renderTable();
+    }
+
+    function normalizeDeviceData(item) {
+      if (item.company === undefined) item.company = "";
+      if (item.jobTitle === undefined) item.jobTitle = "";
+      if (item.manager === undefined) item.manager = "";
+      if (item.inactive === undefined) item.inactive = false;
+      if (item.showLaptop === undefined) item.showLaptop = true;
+      if (item.showDock === undefined) item.showDock = true;
+      if (item.showMonitor === undefined) item.showMonitor = true;
+      if (item.showHeadset === undefined) item.showHeadset = true;
+
+      ['laptop', 'dock', 'monitor', 'headset'].forEach(key => {
+        if (!Array.isArray(item[`${key}PrevOwners`])) {
+          item[`${key}PrevOwners`] = item[`${key}PrevOwner`] ? [item[`${key}PrevOwner`]] : [];
+        }
+        if (item[`${key}AssetID`] === undefined) item[`${key}AssetID`] = "";
+      });
+
+      if (!item.customItems) item.customItems = [];
+      item.customItems.forEach(c => {
+        if (!Array.isArray(c.prevOwners)) {
+          c.prevOwners = c.prevOwner ? [c.prevOwner] : [];
+        }
+        if (c.assetID === undefined) c.assetID = "";
+      });
+    }
+
+    // Main Table Render Procedure
+    function renderTable(keepOpenId = null) {
+      if (keepOpenId !== null) {
+        openDrawerIds.add(keepOpenId);
+      }
+
+      const tbody = document.getElementById('assetTableBody');
+      const emptyState = document.getElementById('emptyState');
+      tbody.innerHTML = '';
+
+      if (assets.length === 0) {
+        emptyState.style.display = 'block';
+        updateMetrics();
+        return;
+      }
+
+      emptyState.style.display = 'none';
+
+      // Apply Sorting (A-Z or Z-A)
+      let displayAssets = [...assets];
+      if (currentSortMode === 'az') {
+        displayAssets.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      } else if (currentSortMode === 'za') {
+        displayAssets.sort((a, b) => b.name.localeCompare(a.name, undefined, { sensitivity: 'base' }));
+      }
+
+      displayAssets.forEach((item) => {
+        normalizeDeviceData(item);
+
+        const isCurrentlyOpen = openDrawerIds.has(item.id);
+
+        const row = document.createElement('tr');
+        row.className = `employee-row ${isCurrentlyOpen ? 'active' : ''} ${item.inactive ? 'inactive' : ''}`;
+        row.onclick = (e) => {
+          if (!e.target.closest('.menu-container') && !e.target.closest('.remove-card-btn') && !e.target.closest('.card-link') && !e.target.closest('.btn-small-add') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
+            toggleAccordion(item.id);
+          }
+        };
+
+        row.innerHTML = `
+          <td style="width: 50px;"><span class="arrow-icon" id="arrow-${item.id}">&gt;</span></td>
+          <td style="font-weight: 600; font-size: 0.95rem;">${escapeHtml(item.name)}</td>
+          <!-- Read-only: change these with ⋮ > Edit Details -->
+          <td class="info-cell">${item.company ? escapeHtml(item.company) : '<span class="empty-value">—</span>'}</td>
+          <td class="info-cell">${item.jobTitle ? escapeHtml(item.jobTitle) : '<span class="empty-value">—</span>'}</td>
+          <td class="info-cell">${item.manager ? escapeHtml(item.manager) : '<span class="empty-value">—</span>'}</td>
+          <td class="actions-cell">
+            <button class="inactive-btn" onclick="toggleInactive(event, ${item.id})">
+              ${item.inactive ? 'Reactivate' : 'Inactive'}
+            </button>
+            <div class="menu-container">
+              <button class="three-dots-btn" onclick="toggleActionMenu(event, ${item.id})" title="Actions">⋮</button>
+              <div class="action-dropdown" id="menu-${item.id}">
+                <button class="action-dropdown-item" onclick="openEditModal(event, ${item.id})">
+                  ✏️ Edit Details
+                </button>
+                <button class="action-dropdown-item danger" onclick="deleteRecord(event, ${item.id})">
+                  🗑️ Delete Entry
+                </button>
+              </div>
+            </div>
+          </td>
+        `;
+
+        const detailsRow = document.createElement('tr');
+        detailsRow.className = `details-row ${isCurrentlyOpen ? 'open' : ''}`;
+        detailsRow.id = `details-${item.id}`;
+
+        // Standard Devices Card Generator
+        const renderStandardCard = (title, key, flagKey, icon) => {
+          if (!item[flagKey]) return '';
+
+          const notesOpen = item[`show${key.charAt(0).toUpperCase() + key.slice(1)}Notes`];
+          const owners = item[`${key}PrevOwners`] || [];
+          const hasOwners = owners.some(o => (o || '').trim());
+          // Shows automatically when the device has previous owners; otherwise only when opened with the button
+          const prevOpen = hasOwners || item[`show${key.charAt(0).toUpperCase() + key.slice(1)}PrevOwner`];
+
+          const ownersHtml = owners.map((owner, oIdx) => `
+            <div class="owner-row">
+              <input type="text" value="${escapeHtml(owner)}" placeholder="Previous owner name..." onchange="updatePrevOwnerField(${item.id}, '${key}', ${oIdx}, this.value)">
+              <button class="remove-card-btn" style="font-size: 0.9rem;" onclick="removePrevOwnerField(${item.id}, '${key}', ${oIdx})">✕</button>
+            </div>
+          `).join('');
+
+          return `
+            <div class="card-box" id="card-${key}-${item.id}">
+              <div class="card-header">
+                <h4>${icon} ${title}</h4>
+                <button class="remove-card-btn" title="Remove Card" onclick="hideStandardCard(event, ${item.id}, '${flagKey}')">✕</button>
+              </div>
+              
+              ${key === 'laptop' ? `
+                <div class="form-group">
+                  <label>Laptop Model</label>
+                  <input type="text" value="${escapeHtml(item.laptop === 'Unassigned' ? '' : (item.laptop || ''))}" placeholder="e.g. Surface Laptop 5, Lenovo ThinkPad T14" onchange="updateAssetField(${item.id}, 'laptop', this.value)">
+                </div>
+              ` : `
+                <div class="form-group">
+                  <label>${title} Model</label>
+                  <input type="text" value="${escapeHtml(item[key] || '')}" placeholder="e.g. Model / Description" onchange="updateAssetField(${item.id}, '${key}', this.value)">
+                </div>
+              `}
+
+              <div class="form-group">
+                <label>Serial Number</label>
+                <input type="text" value="${escapeHtml(item[`${key}SN`] || '')}" placeholder="Enter SN..." onchange="updateAssetField(${item.id}, '${key}SN', this.value)">
+              </div>
+
+              <!-- New Asset ID Field -->
+              <div class="form-group">
+                <label>Asset ID</label>
+                <input type="text" value="${escapeHtml(item[`${key}AssetID`] || '')}" placeholder="Enter Asset ID..." onchange="updateAssetField(${item.id}, '${key}AssetID', this.value)">
+              </div>
+
+              <!-- Date Assigned Field -->
+              <div class="form-group">
+                <label>Date Assigned</label>
+                <input type="date" value="${escapeHtml(item[`${key}DateAssigned`] || '')}" onchange="updateAssetField(${item.id}, '${key}DateAssigned', this.value)">
+              </div>
+
+              <!-- Cost / Value Field -->
+              <div class="form-group">
+                <label>Cost / Value</label>
+                <input type="text" class="cost-input" value="${escapeHtml(item[`${key}Cost`] || '')}" oninput="addDollarSign(this)" onchange="updateAssetField(${item.id}, '${key}Cost', cleanCost(this))">
+              </div>
+
+              <!-- Notes Dropdown Section -->
+              <div class="expandable-section ${notesOpen ? 'open' : ''}">
+                <label>Notes</label>
+                <input type="text" value="${escapeHtml(item[`${key}Notes`] || '')}" placeholder="Add notes..." onchange="updateAssetField(${item.id}, '${key}Notes', this.value)">
+              </div>
+
+              <!-- Previous Owners Dropdown Section -->
+              <div class="expandable-section ${prevOpen ? 'open' : ''}">
+                <label>Previous Owners</label>
+                ${ownersHtml}
+                <button class="btn-small-add" onclick="addPrevOwnerField(${item.id}, '${key}')">+ Add Owner</button>
+              </div>
+
+              <div class="card-footer-links">
+                <span class="card-link" onclick="toggleCardField(event, ${item.id}, 'show${key.charAt(0).toUpperCase() + key.slice(1)}Notes')">
+                  Notes <span class="toggle-arrow ${notesOpen ? 'open' : ''}">▼</span>
+                </span>
+                <span class="card-link" title="${hasOwners ? 'Add another previous owner' : 'Show previous owners'}" onclick="${hasOwners ? `event.stopPropagation(); addPrevOwnerField(${item.id}, '${key}')` : `toggleCardField(event, ${item.id}, 'show${key.charAt(0).toUpperCase() + key.slice(1)}PrevOwner')`}">
+                  Previous Owner <span class="toggle-arrow ${prevOpen ? 'open' : ''}">▼</span>
+                </span>
+              </div>
+            </div>
+          `;
+        };
+
+        const laptopCardHtml = renderStandardCard('Laptop Setup', 'laptop', 'showLaptop', '💻');
+        const dockCardHtml = renderStandardCard('Docking Station', 'dock', 'showDock', '🔌');
+        const monitorCardHtml = renderStandardCard('Monitor Setup', 'monitor', 'showMonitor', '🖥️');
+        const headsetCardHtml = renderStandardCard('Headset', 'headset', 'showHeadset', '🎧');
+
+        // Custom Individual Item Cards Generator
+        const customCardsMarkup = item.customItems.map((c, index) => {
+          const customOwners = c.prevOwners || [];
+          const customHasOwners = customOwners.some(o => (o || '').trim());
+          const customPrevOpen = customHasOwners || c.showPrevOwner;
+          const customOwnersHtml = customOwners.map((owner, oIdx) => `
+            <div class="owner-row">
+              <input type="text" value="${escapeHtml(owner)}" placeholder="Previous owner name..." onchange="updateCustomPrevOwnerField(${item.id}, ${index}, ${oIdx}, this.value)">
+              <button class="remove-card-btn" style="font-size: 0.9rem;" onclick="removeCustomPrevOwnerField(${item.id}, ${index}, ${oIdx})">✕</button>
+            </div>
+          `).join('');
+
+          return `
+            <div class="card-box" id="custom-card-${item.id}-${index}">
+              <div class="card-header">
+                <h4>⚙️ ${escapeHtml(c.title)}</h4>
+                <button class="remove-card-btn" title="Remove Item" onclick="removeCustomItem(event, ${item.id}, ${index})">✕</button>
+              </div>
+              <div class="form-group">
+                <label>Model / Description</label>
+                <input type="text" value="${escapeHtml(c.model || '')}" placeholder="Model name..." onchange="updateCustomItemField(${item.id}, ${index}, 'model', this.value)">
+              </div>
+              <div class="form-group">
+                <label>Serial Number</label>
+                <input type="text" value="${escapeHtml(c.sn || '')}" placeholder="Enter SN..." onchange="updateCustomItemField(${item.id}, ${index}, 'sn', this.value)">
+              </div>
+              <div class="form-group">
+                <label>Asset ID</label>
+                <input type="text" value="${escapeHtml(c.assetID || '')}" placeholder="Enter Asset ID..." onchange="updateCustomItemField(${item.id}, ${index}, 'assetID', this.value)">
+              </div>
+              <div class="form-group">
+                <label>Date Assigned</label>
+                <input type="date" value="${escapeHtml(c.dateAssigned || '')}" onchange="updateCustomItemField(${item.id}, ${index}, 'dateAssigned', this.value)">
+              </div>
+              <div class="form-group">
+                <label>Cost / Value</label>
+                <input type="text" class="cost-input" value="${escapeHtml(c.cost || '')}" oninput="addDollarSign(this)" onchange="updateCustomItemField(${item.id}, ${index}, 'cost', cleanCost(this))">
+              </div>
+
+              <!-- Notes Dropdown Section -->
+              <div class="expandable-section ${c.showNotes ? 'open' : ''}">
+                <label>Notes</label>
+                <input type="text" value="${escapeHtml(c.notes || '')}" placeholder="Add notes..." onchange="updateCustomItemField(${item.id}, ${index}, 'notes', this.value)">
+              </div>
+
+              <!-- Previous Owners Dropdown Section -->
+              <div class="expandable-section ${customPrevOpen ? 'open' : ''}">
+                <label>Previous Owners</label>
+                ${customOwnersHtml}
+                <button class="btn-small-add" onclick="addCustomPrevOwnerField(${item.id}, ${index})">+ Add Owner</button>
+              </div>
+
+              <div class="card-footer-links">
+                <span class="card-link" onclick="toggleCustomCardField(event, ${item.id}, ${index}, 'showNotes')">
+                  Notes <span class="toggle-arrow ${c.showNotes ? 'open' : ''}">▼</span>
+                </span>
+                <span class="card-link" title="${customHasOwners ? 'Add another previous owner' : 'Show previous owners'}" onclick="${customHasOwners ? `event.stopPropagation(); addCustomPrevOwnerField(${item.id}, ${index})` : `toggleCustomCardField(event, ${item.id}, ${index}, 'showPrevOwner')`}">
+                  Previous Owner <span class="toggle-arrow ${customPrevOpen ? 'open' : ''}">▼</span>
+                </span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        detailsRow.innerHTML = `
+          <td colspan="6" style="padding: 0;">
+            <div class="details-container">
+              ${laptopCardHtml}
+              ${dockCardHtml}
+              ${monitorCardHtml}
+              ${headsetCardHtml}
+              ${customCardsMarkup}
+
+              <div class="add-card-box">
+                <button class="secondary" onclick="openIndividualDeviceModal(${item.id})">
+                  ➕ Add Item for ${escapeHtml(item.name.split(' ')[0])}
+                </button>
+                <span style="font-size: 0.75rem; color: var(--text-sub);">Add Laptop, Dock, Monitor or Custom Item</span>
+              </div>
+            </div>
+          </td>
+        `;
+
+        tbody.appendChild(row);
+        tbody.appendChild(detailsRow);
+      });
+
+      updateMetrics();
+      filterTable();
+    }
+
+    // Toggle Accordion Drawer
+    function toggleAccordion(id) {
+      const detailsRow = document.getElementById(`details-${id}`);
+      const row = document.getElementById(`arrow-${id}`).closest('tr');
+
+      if (openDrawerIds.has(id)) {
+        openDrawerIds.delete(id);
+        detailsRow.classList.remove('open');
+        row.classList.remove('active');
+      } else {
+        openDrawerIds.add(id);
+        detailsRow.classList.add('open');
+        row.classList.add('active');
+      }
+    }
+
+    function updateAssetField(id, key, value) {
+      const asset = assets.find(a => a.id === id);
+      if (asset) {
+        asset[key] = value;
+        saveData();
+      }
+    }
+
+    function toggleCardField(event, id, flagKey) {
+      if (event) event.stopPropagation();
+      const asset = assets.find(a => a.id === id);
+      if (asset) {
+        asset[flagKey] = !asset[flagKey];
+        saveData();
+        renderTable(id);
+      }
+    }
+
+    function toggleCustomCardField(event, id, itemIndex, flagKey) {
+      if (event) event.stopPropagation();
+      const asset = assets.find(a => a.id === id);
+      if (asset && asset.customItems[itemIndex]) {
+        asset.customItems[itemIndex][flagKey] = !asset.customItems[itemIndex][flagKey];
+        saveData();
+        renderTable(id);
+      }
+    }
+
+    function addPrevOwnerField(id, key) {
+      const asset = assets.find(a => a.id === id);
+      if (asset) {
+        if (!Array.isArray(asset[`${key}PrevOwners`])) asset[`${key}PrevOwners`] = [];
+        asset[`${key}PrevOwners`].push('');
+        asset[`show${key.charAt(0).toUpperCase() + key.slice(1)}PrevOwner`] = true;
+        saveData();
+        renderTable(id);
+        const box = document.querySelector(`#card-${key}-${id} .owner-row:last-of-type input`);
+        if (box) box.focus();
+      }
+    }
+
+    function updatePrevOwnerField(id, key, ownerIdx, value) {
+      const asset = assets.find(a => a.id === id);
+      if (asset && Array.isArray(asset[`${key}PrevOwners`])) {
+        asset[`${key}PrevOwners`][ownerIdx] = value;
+        saveData();
+      }
+    }
+
+    function removePrevOwnerField(id, key, ownerIdx) {
+      const asset = assets.find(a => a.id === id);
+      if (asset && Array.isArray(asset[`${key}PrevOwners`])) {
+        asset[`${key}PrevOwners`].splice(ownerIdx, 1);
+        saveData();
+        renderTable(id);
+      }
+    }
+
+    function addCustomPrevOwnerField(id, itemIndex) {
+      const asset = assets.find(a => a.id === id);
+      if (asset && asset.customItems[itemIndex]) {
+        if (!Array.isArray(asset.customItems[itemIndex].prevOwners)) asset.customItems[itemIndex].prevOwners = [];
+        asset.customItems[itemIndex].prevOwners.push('');
+        asset.customItems[itemIndex].showPrevOwner = true;
+        saveData();
+        renderTable(id);
+        const box = document.querySelector(`#custom-card-${id}-${itemIndex} .owner-row:last-of-type input`);
+        if (box) box.focus();
+      }
+    }
+
+    function updateCustomPrevOwnerField(id, itemIndex, ownerIdx, value) {
+      const asset = assets.find(a => a.id === id);
+      if (asset && asset.customItems[itemIndex] && Array.isArray(asset.customItems[itemIndex].prevOwners)) {
+        asset.customItems[itemIndex].prevOwners[ownerIdx] = value;
+        saveData();
+      }
+    }
+
+    function removeCustomPrevOwnerField(id, itemIndex, ownerIdx) {
+      const asset = assets.find(a => a.id === id);
+      if (asset && asset.customItems[itemIndex] && Array.isArray(asset.customItems[itemIndex].prevOwners)) {
+        asset.customItems[itemIndex].prevOwners.splice(ownerIdx, 1);
+        saveData();
+        renderTable(id);
+      }
+    }
+
+    // ---------- Sending equipment back to Inventory ----------
+    const STANDARD_CARD_TYPES = { laptop: 'Laptop', dock: 'Docking Station', monitor: 'Monitor', headset: 'Headset' };
+
+    // Reads one equipment card into the same shape as an Inventory row
+    function cardToInventoryItem(person, card) {
+      const model = (card.model || '').trim() === 'Unassigned' ? '' : (card.model || '').trim();
+      const prevOwners = (card.prevOwners || []).filter(o => o && o.trim());
+      if (!prevOwners.some(o => o.trim().toLowerCase() === person.name.trim().toLowerCase())) prevOwners.push(person.name);
+      return {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        type: card.type || '',
+        model: model,
+        sn: card.sn || '',
+        assetID: card.assetID || '',
+        notes: card.notes || '',
+        cost: card.cost || '',
+        prevOwners: prevOwners
+      };
+    }
+
+    function cardHasDetails(card) {
+      const model = (card.model || '').trim();
+      return (model && model !== 'Unassigned') || (card.sn || '').trim() || (card.assetID || '').trim() || (card.notes || '').trim() || (card.cost || '').trim();
+    }
+
+    // Asks what to do with a card that has details. Returns 'inventory', 'delete', or 'cancel'.
+    function askReturnToInventory(person, card) {
+      const label = [card.type, (card.model || '') === 'Unassigned' ? '' : card.model].filter(v => v && v.trim()).join(' – ');
+      const sn = card.sn ? ` (SN ${card.sn})` : '';
+      if (confirm(`Move ${label}${sn} from ${person.name} back to Inventory?\n\nOK = move it to Inventory with all its details\nCancel = more options`)) return 'inventory';
+      if (confirm(`Remove ${label}${sn} from ${person.name} WITHOUT putting it back in Inventory?\n(Use this for equipment that is broken, lost, or disposed of.)\n\nOK = remove it completely\nCancel = keep it on ${person.name}`)) return 'delete';
+      return 'cancel';
+    }
+
+    function hideStandardCard(event, id, visibilityFlagKey) {
+      if (event) event.stopPropagation();
+      const asset = assets.find(a => a.id === id);
+      if (!asset) return;
+      const key = visibilityFlagKey.replace('show', '').toLowerCase();   // 'showLaptop' -> 'laptop'
+      const card = {
+        type: STANDARD_CARD_TYPES[key], model: asset[key], sn: asset[`${key}SN`],
+        assetID: asset[`${key}AssetID`], notes: asset[`${key}Notes`], prevOwners: asset[`${key}PrevOwners`],
+        cost: asset[`${key}Cost`]
+      };
+
+      if (cardHasDetails(card)) {
+        const choice = askReturnToInventory(asset, card);
+        if (choice === 'cancel') return;
+        if (choice === 'inventory') {
+          inventory.unshift(cardToInventoryItem(asset, card));
+          saveInventory();
+        }
+      }
+
+      asset[visibilityFlagKey] = false;
+      asset[key] = '';
+      asset[`${key}SN`] = '';
+      asset[`${key}AssetID`] = '';
+      asset[`${key}DateAssigned`] = '';
+      asset[`${key}Cost`] = '';
+      asset[`${key}Notes`] = '';
+      asset[`${key}PrevOwners`] = [];
+      saveData();
+      renderTable(id);
+    }
+
+    function removeCustomItem(event, id, itemIndex) {
+      if (event) event.stopPropagation();
+      const asset = assets.find(a => a.id === id);
+      if (!asset || !asset.customItems || !asset.customItems[itemIndex]) return;
+      const c = asset.customItems[itemIndex];
+      const card = { type: c.title, model: c.model, sn: c.sn, assetID: c.assetID, notes: c.notes, prevOwners: c.prevOwners, cost: c.cost };
+
+      if (cardHasDetails(card)) {
+        const choice = askReturnToInventory(asset, card);
+        if (choice === 'cancel') return;
+        if (choice === 'inventory') {
+          inventory.unshift(cardToInventoryItem(asset, card));
+          saveInventory();
+        }
+      }
+
+      asset.customItems.splice(itemIndex, 1);
+      saveData();
+      renderTable(id);
+    }
+
+    // Every card on a person that has details, ready to go back to Inventory
+    function allCardsOf(person) {
+      const cards = [];
+      Object.keys(STANDARD_CARD_TYPES).forEach(key => {
+        const flag = 'show' + key.charAt(0).toUpperCase() + key.slice(1);
+        if (!person[flag]) return;
+        const card = { type: STANDARD_CARD_TYPES[key], model: person[key], sn: person[`${key}SN`],
+          assetID: person[`${key}AssetID`], notes: person[`${key}Notes`], prevOwners: person[`${key}PrevOwners`],
+          cost: person[`${key}Cost`] };
+        if (cardHasDetails(card)) cards.push(card);
+      });
+      (person.customItems || []).forEach(c => {
+        const card = { type: c.title, model: c.model, sn: c.sn, assetID: c.assetID, notes: c.notes, prevOwners: c.prevOwners, cost: c.cost };
+        if (cardHasDetails(card)) cards.push(card);
+      });
+      return cards;
+    }
+
+    function updateCustomItemField(id, itemIndex, field, value) {
+      const asset = assets.find(a => a.id === id);
+      if (asset && asset.customItems[itemIndex]) {
+        asset.customItems[itemIndex][field] = value;
+        saveData();
+      }
+    }
+
+    function openEditModal(event, personId) {
+      if (event) event.stopPropagation();
+      closeAllDropdowns();
+      activePersonForEdit = personId;
+      const person = assets.find(a => a.id === personId);
+      if (person) {
+        document.getElementById('editPersonName').value = person.name;
+        document.getElementById('editPersonCompany').value = person.company || '';
+        document.getElementById('editPersonJobTitle').value = person.jobTitle || '';
+        document.getElementById('editPersonManager').value = person.manager || '';
+        document.getElementById('editModal').classList.add('active');
+      }
+    }
+
+    function closeEditModal() {
+      activePersonForEdit = null;
+      document.getElementById('editModal').classList.remove('active');
+      document.getElementById('editPersonName').value = '';
+      document.getElementById('editPersonCompany').value = '';
+      document.getElementById('editPersonJobTitle').value = '';
+      document.getElementById('editPersonManager').value = '';
+    }
+
+    function saveEditedPerson() {
+      const newName = document.getElementById('editPersonName').value.trim();
+      if (!newName) return alert("Please enter a valid employee name.");
+
+      const person = assets.find(a => a.id === activePersonForEdit);
+      if (person) {
+        person.name = newName;
+        person.company = document.getElementById('editPersonCompany').value.trim();
+        person.jobTitle = document.getElementById('editPersonJobTitle').value.trim();
+        person.manager = document.getElementById('editPersonManager').value.trim();
+        saveData();
+        renderTable(person.id);
+      }
+      closeEditModal();
+    }
+
+    function openIndividualDeviceModal(personId) {
+      activePersonForCustomItem = personId;
+      document.getElementById('individualDeviceModal').classList.add('active');
+    }
+
+    function closeIndividualDeviceModal() {
+      activePersonForCustomItem = null;
+      document.getElementById('individualDeviceModal').classList.remove('active');
+      document.getElementById('newIndividualDeviceTitle').value = '';
+    }
+
+    function saveIndividualDevice() {
+      const title = document.getElementById('newIndividualDeviceTitle').value.trim();
+      if (!title) return alert("Please enter an item name.");
+
+      const asset = assets.find(a => a.id === activePersonForCustomItem);
+      if (asset) {
+        const lowerTitle = title.toLowerCase();
+        // If the main card for this type is hidden, bring it back.
+        // If it is already showing, add a separate extra card instead
+        // (this is how a person gets a 2nd laptop, 2nd monitor, etc.).
+        if (lowerTitle.includes('laptop') && !asset.showLaptop) { asset.showLaptop = true; }
+        else if (lowerTitle.includes('dock') && !asset.showDock) { asset.showDock = true; }
+        else if (lowerTitle.includes('monitor') && !asset.showMonitor) { asset.showMonitor = true; }
+        else if (lowerTitle.includes('headset') && !asset.showHeadset) { asset.showHeadset = true; }
+        else {
+          if (!asset.customItems) asset.customItems = [];
+          asset.customItems.push({ title: title, model: '', sn: '', assetID: '', notes: '', prevOwners: [] });
+        }
+        saveData();
+        renderTable(asset.id);
+      }
+      closeIndividualDeviceModal();
+    }
+
+    function updateMetrics() {
+      // Counts devices (not people), including extra cards like a 2nd laptop.
+      // Builds one list of every device: { type: 'laptop', model: 'Surface Laptop 5' }
+      const devices = [];
+      assets.forEach(a => {
+        if (a.showLaptop) devices.push({ type: 'laptop', model: a.laptop || '' });
+        if (a.showDock) devices.push({ type: 'dock', model: a.dock || '' });
+        if (a.showMonitor) devices.push({ type: 'monitor', model: a.monitor || '' });
+        if (a.showHeadset) devices.push({ type: 'headset', model: a.headset || '' });
+        (a.customItems || []).forEach(c => {
+          devices.push({ type: (c.title || '').toLowerCase(), model: c.model || '' });
+        });
+      });
+
+      const hasModel = d => d.model.trim() !== '' && d.model !== 'Unassigned';
+      const modelHas = (d, word) => d.model.toLowerCase().includes(word);
+      const countType = word => devices.filter(d => d.type.includes(word) && hasModel(d)).length;
+
+      document.getElementById('metric-total').innerText = assets.length;
+      document.getElementById('metric-surface').innerText = devices.filter(d => d.type.includes('laptop') && modelHas(d, 'surface')).length;
+      document.getElementById('metric-lenovo').innerText = devices.filter(d => d.type.includes('laptop') && (modelHas(d, 'lenovo') || modelHas(d, 'thinkpad'))).length;
+      document.getElementById('metric-docks').innerText = countType('dock');
+      document.getElementById('metric-monitors').innerText = countType('monitor');
+      document.getElementById('metric-headsets').innerText = countType('headset');
+    }
+
+    function filterTable() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      assets.forEach(item => {
+        const arrow = document.getElementById(`arrow-${item.id}`);
+        if (!arrow) return;
+        const row = arrow.closest('tr');
+        const detailsRow = document.getElementById(`details-${item.id}`);
+        
+        let match = !query || Object.values(item).some(val => typeof val === 'string' && val.toLowerCase().includes(query));
+        
+        if (!match && item.customItems) {
+          match = item.customItems.some(c => 
+            c.title.toLowerCase().includes(query) || 
+            (c.model && c.model.toLowerCase().includes(query)) || 
+            (c.sn && c.sn.toLowerCase().includes(query)) ||
+            (c.assetID && c.assetID.toLowerCase().includes(query)) ||
+            (c.dateAssigned && c.dateAssigned.toLowerCase().includes(query)) ||
+            (c.cost && c.cost.toLowerCase().includes(query)) ||
+            (c.notes && c.notes.toLowerCase().includes(query)) ||
+            (c.prevOwners && c.prevOwners.some(o => o.toLowerCase().includes(query)))
+          );
+        }
+
+        if (!match) {
+          ['laptop', 'dock', 'monitor', 'headset'].forEach(k => {
+            if (item[`${k}AssetID`] && item[`${k}AssetID`].toLowerCase().includes(query)) match = true;
+            if (item[`${k}Notes`] && item[`${k}Notes`].toLowerCase().includes(query)) match = true;
+            if (item[`${k}PrevOwners`] && item[`${k}PrevOwners`].some(o => o.toLowerCase().includes(query))) match = true;
+          });
+        }
+
+        if (match) {
+          row.style.display = '';
+          if (openDrawerIds.has(item.id)) {
+            detailsRow.classList.add('open');
+            row.classList.add('active');
+          }
+        } else {
+          row.style.display = 'none';
+          detailsRow.classList.remove('open');
+          row.classList.remove('active');
+        }
+      });
+    }
+
+    function deleteRecord(event, id) {
+      event.stopPropagation();
+      closeAllDropdowns();
+      const person = assets.find(a => a.id === id);
+      if (!person) return;
+      if (!confirm(`Are you sure you want to delete ${person.name}?`)) return;
+
+      const cards = allCardsOf(person);
+      if (cards.length > 0 && confirm(`${person.name} has ${cards.length} piece(s) of equipment.\n\nOK = move all of it back to Inventory\nCancel = delete it along with ${person.name}`)) {
+        cards.forEach(card => inventory.unshift(cardToInventoryItem(person, card)));
+        saveInventory();
+      }
+
+      openDrawerIds.delete(id);
+      assets = assets.filter(a => a.id !== id);
+      saveData();
+      renderTable();
+    }
+
+    function openAddModal() { document.getElementById('addModal').classList.add('active'); }
+    function closeAddModal() { 
+      document.getElementById('addModal').classList.remove('active');
+      document.getElementById('newPersonName').value = '';
+      document.getElementById('newPersonCompany').value = '';
+      document.getElementById('newPersonJobTitle').value = '';
+      document.getElementById('newPersonManager').value = '';
+    }
+
+    function saveNewPerson() {
+      const nameInput = document.getElementById('newPersonName').value.trim();
+      if (!nameInput) return alert("Please enter a person's name.");
+
+      const newRecord = {
+        id: Date.now(),
+        name: nameInput,
+        company: document.getElementById('newPersonCompany').value.trim(),
+        jobTitle: document.getElementById('newPersonJobTitle').value.trim(),
+        manager: document.getElementById('newPersonManager').value.trim(),
+        inactive: false,
+        showLaptop: true, laptop: '', laptopSN: '', laptopAssetID: '', laptopNotes: '', laptopPrevOwners: [],
+        showDock: true, dock: '', dockSN: '', dockAssetID: '', dockNotes: '', dockPrevOwners: [],
+        showMonitor: true, monitor: '', monitorSN: '', monitorAssetID: '', monitorNotes: '', monitorPrevOwners: [],
+        showHeadset: true, headset: '', headsetSN: '', headsetAssetID: '', headsetNotes: '', headsetPrevOwners: [],
+        customItems: []
+      };
+
+      assets.unshift(newRecord);
+      saveData();
+      renderTable(newRecord.id);
+      closeAddModal();
+    }
+
+    function handleCSVFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseAndMergeCSV(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseCSVLine(text) {
+      const delimiter = text.includes('\t') ? '\t' : (text.includes(';') ? ';' : ',');
+      const result = [];
+      let cell = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '"' || char === "'") {
+          inQuotes = !inQuotes;
+        } else if (char === delimiter && !inQuotes) {
+          result.push(cell.trim().replace(/^["']|["']$/g, ''));
+          cell = '';
+        } else {
+          cell += char;
+        }
+      }
+      result.push(cell.trim().replace(/^["']|["']$/g, ''));
+      return result;
+    }
+
+    function parseAndMergeCSV(csvText) {
+      const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 2) return alert("CSV file appears empty or missing data rows.");
+
+      const rawHeaders = parseCSVLine(lines[0]);
+      const headers = rawHeaders.map(h => h.replace(/^\uFEFF/, '').toLowerCase());
+
+      let nameIdx = headers.findIndex(h => {
+        const isExcluded = h.includes('position') || h.includes('role') || h.includes('job') || h.includes('department') || h.includes('id') || h.includes('manager') || h.includes('supervisor') || h.includes('company');
+        return !isExcluded && (
+          h.includes('name') || h.includes('person') || h.includes('employee') || 
+          h.includes('user') || h.includes('assigned') || h.includes('staff') || h === 'title'
+        );
+      });
+
+      if (nameIdx === -1) {
+        let optionsList = rawHeaders.map((h, i) => `${i + 1}: ${h || '(Empty Header)'}`).join('\n');
+        let selected = prompt(`Could not automatically identify the Employee Name column.\n\nPlease enter the column NUMBER for Employee Name:\n\n${optionsList}`, "1");
+        if (!selected) return;
+        nameIdx = parseInt(selected, 10) - 1;
+        if (isNaN(nameIdx) || nameIdx < 0 || nameIdx >= rawHeaders.length) {
+          return alert("Invalid column selection.");
+        }
+      }
+
+      const companyIdx = headers.findIndex(h => h.includes('company') || h.includes('organization'));
+      const jobTitleIdx = headers.findIndex(h => h.includes('job') || h.includes('position') || h.includes('role'));
+      const managerIdx = headers.findIndex(h => h.includes('manager') || h.includes('supervisor') || h.includes('reports to'));
+
+      const laptopIdx = headers.findIndex(h => h.includes('laptop') || h.includes('device') || h.includes('computer') || h.includes('model'));
+      const laptopSnIdx = headers.findIndex(h => h.includes('laptop sn') || h.includes('laptop serial') || h.includes('device sn') || (h.includes('serial') && !h.includes('dock') && !h.includes('monitor') && !h.includes('headset')));
+      const laptopAssetIdx = headers.findIndex(h => h.includes('laptop asset') || h.includes('laptop tag'));
+      const dockIdx = headers.findIndex(h => h.includes('dock'));
+      const dockSnIdx = headers.findIndex(h => h.includes('dock sn') || h.includes('dock serial'));
+      const dockAssetIdx = headers.findIndex(h => h.includes('dock asset') || h.includes('dock tag'));
+      const monitorIdx = headers.findIndex(h => h.includes('monitor') || h.includes('display'));
+      const monitorSnIdx = headers.findIndex(h => h.includes('monitor sn') || h.includes('monitor serial'));
+      const monitorAssetIdx = headers.findIndex(h => h.includes('monitor asset') || h.includes('monitor tag'));
+      const headsetIdx = headers.findIndex(h => h.includes('headset') || h.includes('audio') || h.includes('headphone'));
+      const headsetSnIdx = headers.findIndex(h => h.includes('headset sn') || h.includes('headset serial'));
+      const headsetAssetIdx = headers.findIndex(h => h.includes('headset asset') || h.includes('headset tag'));
+
+      let importedCount = 0;
+
+      lines.slice(1).forEach(line => {
+        const cols = parseCSVLine(line);
+        const personName = cols[nameIdx];
+        if (!personName || personName.toLowerCase() === rawHeaders[nameIdx].toLowerCase()) return;
+
+        let person = assets.find(a => a.name.toLowerCase() === personName.toLowerCase());
+        if (!person) {
+          person = {
+            id: Date.now() + Math.floor(Math.random() * 100000),
+            name: personName,
+            company: '', jobTitle: '', manager: '',
+            inactive: false,
+            showLaptop: true, laptop: '', laptopSN: '', laptopAssetID: '', laptopNotes: '', laptopPrevOwners: [],
+            showDock: true, dock: '', dockSN: '', dockAssetID: '', dockNotes: '', dockPrevOwners: [],
+            showMonitor: true, monitor: '', monitorSN: '', monitorAssetID: '', monitorNotes: '', monitorPrevOwners: [],
+            showHeadset: true, headset: '', headsetSN: '', headsetAssetID: '', headsetNotes: '', headsetPrevOwners: [],
+            customItems: []
+          };
+          assets.push(person);
+        }
+
+        if (companyIdx !== -1 && cols[companyIdx]) person.company = cols[companyIdx];
+        if (jobTitleIdx !== -1 && cols[jobTitleIdx]) person.jobTitle = cols[jobTitleIdx];
+        if (managerIdx !== -1 && cols[managerIdx]) person.manager = cols[managerIdx];
+
+        if (laptopIdx !== -1 && cols[laptopIdx]) {
+          person.laptop = cols[laptopIdx];
+        }
+        if (laptopSnIdx !== -1 && cols[laptopSnIdx]) person.laptopSN = cols[laptopSnIdx];
+        if (laptopAssetIdx !== -1 && cols[laptopAssetIdx]) person.laptopAssetID = cols[laptopAssetIdx];
+        if (dockIdx !== -1 && cols[dockIdx]) person.dock = cols[dockIdx];
+        if (dockSnIdx !== -1 && cols[dockSnIdx]) person.dockSN = cols[dockSnIdx];
+        if (dockAssetIdx !== -1 && cols[dockAssetIdx]) person.dockAssetID = cols[dockAssetIdx];
+        if (monitorIdx !== -1 && cols[monitorIdx]) person.monitor = cols[monitorIdx];
+        if (monitorSnIdx !== -1 && cols[monitorSnIdx]) person.monitorSN = cols[monitorSnIdx];
+        if (monitorAssetIdx !== -1 && cols[monitorAssetIdx]) person.monitorAssetID = cols[monitorAssetIdx];
+        if (headsetIdx !== -1 && cols[headsetIdx]) person.headset = cols[headsetIdx];
+        if (headsetSnIdx !== -1 && cols[headsetSnIdx]) person.headsetSN = cols[headsetSnIdx];
+        if (headsetAssetIdx !== -1 && cols[headsetAssetIdx]) person.headsetAssetID = cols[headsetAssetIdx];
+
+        importedCount++;
+      });
+
+      saveData();
+      renderTable();
+      alert(`Success! Successfully imported/merged ${importedCount} records.`);
+    }
+
+    // Full backup: employees AND inventory in one file
+    function exportToJSON() {
+      downloadJSON({ app: 'IT Asset Tracker', exportedAt: new Date().toISOString(), assets: assets, inventory: inventory }, 'IT_Asset_Tracker_Full_Backup');
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
