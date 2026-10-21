@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -230,6 +230,16 @@
 
     /* Typeable boxes inside table rows (Company / Job Title / Manager and Inventory) */
     .info-cell { min-width: 170px; }
+
+    /* Inventory table: tighter spacing so all columns (incl. warranty dates) fit on screen */
+    #inventoryView th, #inventoryView td { padding-left: 8px; padding-right: 8px; }
+    #inventoryView th { white-space: normal; }
+    #inventoryView .info-cell { min-width: 0; }
+    #inventoryView .inline-input { min-width: 0; width: 100%; padding-left: 8px; padding-right: 8px; }
+    #inventoryView .date-cell { width: 128px; }
+    #inventoryView .no-warranty { color: #c4c9d1; text-align: center; }
+    #inventoryView .inline-input.date-input { min-width: 118px; padding-left: 6px; padding-right: 4px; }
+    #inventoryView .inventory-delete-btn { padding: 6px 8px; }
 
     /* Dash shown when Company / Job Title / Manager is blank */
     .empty-value { color: #9ca3af; }
@@ -759,6 +769,8 @@
             <th>Model / Description</th>
             <th>Serial Number</th>
             <th>Asset ID</th>
+            <th>Warranty Start</th>
+            <th>Warranty End</th>
             <th>Notes</th>
             <th>Assigned To</th>
             <th class="actions-cell">Actions</th>
@@ -1416,18 +1428,32 @@
       // Clear the search box and tile filter so the new blank row is not hidden
       document.getElementById('inventorySearch').value = '';
       inventoryFilter = null;
-      inventory.unshift({ id: Date.now(), type: '', model: '', sn: '', assetID: '', notes: '' });
+      inventory.unshift({ id: Date.now(), type: '', model: '', sn: '', assetID: '', warrantyStart: '', warrantyEnd: '', notes: '' });
       saveInventory();
       renderInventory();
       const firstInput = document.querySelector('#inventoryTableBody input');
       if (firstInput) firstInput.focus();
     }
 
+    // Laptops and desktops get Warranty Start / End boxes on the Inventory page
+    function hasWarranty(type) {
+      const t = (type || '').toLowerCase();
+      return t.includes('laptop') || t.includes('desktop');
+    }
+
     function updateInventoryField(id, key, value) {
       const item = inventory.find(i => i.id === id);
       if (item) {
+        const hadWarranty = hasWarranty(item.type);
         item[key] = value;
         saveInventory();
+        // Equipment Type changed to/from Laptop or Desktop: redraw so the warranty boxes appear/disappear,
+        // then put the cursor in that row's Model / Description box
+        if (key === 'type' && hasWarranty(value) !== hadWarranty) {
+          renderInventory();
+          const next = document.querySelector(`#inventoryTableBody tr[data-id="${id}"] td:nth-child(2) input`);
+          if (next) next.focus();
+        }
       }
     }
 
@@ -1464,7 +1490,8 @@
       const typeText = ((item.type || '') + ' ' + (item.model || '')).toLowerCase();
 
       // Which standard card does this belong on? (Laptop, Docking Station, Monitor, Headset)
-      const standard = ['laptop', 'dock', 'monitor', 'headset'].find(k => typeText.includes(k));
+      const standard = typeText.includes('desktop') ? 'laptop'
+        : ['laptop', 'dock', 'monitor', 'headset'].find(k => typeText.includes(k));
       const flag = standard ? 'show' + standard.charAt(0).toUpperCase() + standard.slice(1) : null;
       const cardIsFree = standard && (
         !person[flag] ||
@@ -1482,8 +1509,11 @@
         person[`${standard}Notes`] = item.notes || '';
         person[`${standard}DateAssigned`] = today;
         person[`${standard}Cost`] = item.cost || '';
+        person[`${standard}Type`] = (item.type || '').trim();   // e.g. "Desktop", so it goes back to Inventory as the same type
+        person[`${standard}WarrantyStart`] = item.warrantyStart || '';
+        person[`${standard}WarrantyEnd`] = item.warrantyEnd || '';
         person[`${standard}PrevOwners`] = [...(item.prevOwners || [])];
-        placedOn = { laptop: 'Laptop Setup', dock: 'Docking Station', monitor: 'Monitor Setup', headset: 'Headset' }[standard] + ' card';
+        placedOn = { laptop: 'Laptop/Desktop', dock: 'Docking Station', monitor: 'Monitor Setup', headset: 'Headset' }[standard] + ' card';
       } else {
         // Main card already in use (or not a standard type): add an extra card
         const title = (item.type || '').trim() || (item.model || '').trim() || 'Equipment';
@@ -1494,6 +1524,8 @@
           assetID: item.assetID || '',
           dateAssigned: today,
           cost: item.cost || '',
+          warrantyStart: item.warrantyStart || '',
+          warrantyEnd: item.warrantyEnd || '',
           notes: item.notes || '',
           prevOwners: [...(item.prevOwners || [])]
         });
@@ -1569,7 +1601,7 @@
       const visibleItems = inventory.filter(i => {
         if (inventoryFilter && !itemMatchesTile(i, inventoryFilter)) return false;
         if (!query) return true;
-        return [i.type, i.model, i.sn, i.assetID, i.notes, ...(i.prevOwners || [])].some(v => (v || '').toLowerCase().includes(query));
+        return [i.type, i.model, i.sn, i.assetID, i.notes, i.warrantyStart, i.warrantyEnd, ...(i.prevOwners || [])].some(v => (v || '').toLowerCase().includes(query));
       });
 
       if (visibleItems.length === 0) {
@@ -1584,6 +1616,7 @@
 
       visibleItems.forEach(item => {
         const row = document.createElement('tr');
+        row.dataset.id = item.id;
         row.innerHTML = `
           <td class="info-cell">
             <input type="text" class="inline-input" list="inventoryTypes" value="${escapeHtml(item.type || '')}" placeholder="Type equipment..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'type', this.value)">
@@ -1597,11 +1630,20 @@
           <td class="info-cell">
             <input type="text" class="inline-input" value="${escapeHtml(item.assetID || '')}" placeholder="Type asset ID..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'assetID', this.value)">
           </td>
+          ${hasWarranty(item.type) ? `
+          <td class="date-cell">
+            <input type="date" class="inline-input date-input" value="${escapeHtml(item.warrantyStart || '')}" title="Warranty start" onchange="updateInventoryField(${item.id}, 'warrantyStart', this.value)">
+          </td>
+          <td class="date-cell">
+            <input type="date" class="inline-input date-input" value="${escapeHtml(item.warrantyEnd || '')}" title="Warranty end" onchange="updateInventoryField(${item.id}, 'warrantyEnd', this.value)">
+          </td>` : `
+          <td class="date-cell no-warranty">—</td>
+          <td class="date-cell no-warranty">—</td>`}
           <td class="info-cell">
             <input type="text" class="inline-input" value="${escapeHtml(item.notes || '')}" placeholder="Type notes..." onkeydown="if(event.key==='Enter') this.blur()" onchange="updateInventoryField(${item.id}, 'notes', this.value)">
           </td>
           <td class="info-cell">
-            <input type="text" class="inline-input" list="employeeNames" value="" placeholder="Type employee name..." onkeydown="if(event.key==='Enter') this.blur()" onchange="assignInventoryItem(${item.id}, this)">
+            <input type="text" class="inline-input" list="employeeNames" value="" placeholder="Employee name..." onkeydown="if(event.key==='Enter') this.blur()" onchange="assignInventoryItem(${item.id}, this)">
             ${(item.prevOwners || []).length ? `<div class="prev-owner-hint">Previously: ${escapeHtml(item.prevOwners.join(', '))}<button type="button" class="prev-owner-clear" title="Clear previous owners" onclick="clearInventoryPrevOwners(${item.id})">✕</button></div>` : ''}
           </td>
           <td class="actions-cell">
@@ -1786,8 +1828,8 @@
               
               ${key === 'laptop' ? `
                 <div class="form-group">
-                  <label>Laptop Model</label>
-                  <input type="text" value="${escapeHtml(item.laptop === 'Unassigned' ? '' : (item.laptop || ''))}" placeholder="e.g. Surface Laptop 5, Lenovo ThinkPad T14" onchange="updateAssetField(${item.id}, 'laptop', this.value)">
+                  <label>Laptop/Desktop Model</label>
+                  <input type="text" value="${escapeHtml(item.laptop === 'Unassigned' ? '' : (item.laptop || ''))}" placeholder="e.g. Lenovo ThinkPad, Dell OptiPlex" onchange="updateAssetField(${item.id}, 'laptop', this.value)">
                 </div>
               ` : `
                 <div class="form-group">
@@ -1813,11 +1855,23 @@
                 <input type="date" value="${escapeHtml(item[`${key}DateAssigned`] || '')}" onchange="updateAssetField(${item.id}, '${key}DateAssigned', this.value)">
               </div>
 
+              ${key === 'laptop' ? `
+              <!-- Warranty dates (laptop cards only) -->
+              <div class="form-group">
+                <label>Warranty Start</label>
+                <input type="date" value="${escapeHtml(item.laptopWarrantyStart || '')}" onchange="updateAssetField(${item.id}, 'laptopWarrantyStart', this.value)">
+              </div>
+              <div class="form-group">
+                <label>Warranty End</label>
+                <input type="date" value="${escapeHtml(item.laptopWarrantyEnd || '')}" onchange="updateAssetField(${item.id}, 'laptopWarrantyEnd', this.value)">
+              </div>
+              ` : ''}
               <!-- Cost / Value Field -->
               <div class="form-group">
                 <label>Cost / Value</label>
                 <input type="text" class="cost-input" value="${escapeHtml(item[`${key}Cost`] || '')}" oninput="addDollarSign(this)" onchange="updateAssetField(${item.id}, '${key}Cost', cleanCost(this))">
               </div>
+
 
               <!-- Notes Dropdown Section -->
               <div class="expandable-section ${notesOpen ? 'open' : ''}">
@@ -1844,7 +1898,7 @@
           `;
         };
 
-        const laptopCardHtml = renderStandardCard('Laptop Setup', 'laptop', 'showLaptop', '💻');
+        const laptopCardHtml = renderStandardCard('Laptop/Desktop', 'laptop', 'showLaptop', '💻');
         const dockCardHtml = renderStandardCard('Docking Station', 'dock', 'showDock', '🔌');
         const monitorCardHtml = renderStandardCard('Monitor Setup', 'monitor', 'showMonitor', '🖥️');
         const headsetCardHtml = renderStandardCard('Headset', 'headset', 'showHeadset', '🎧');
@@ -1883,6 +1937,16 @@
                 <label>Date Assigned</label>
                 <input type="date" value="${escapeHtml(c.dateAssigned || '')}" onchange="updateCustomItemField(${item.id}, ${index}, 'dateAssigned', this.value)">
               </div>
+              ${hasWarranty((c.title || '') + ' ' + (c.model || '')) ? `
+              <div class="form-group">
+                <label>Warranty Start</label>
+                <input type="date" value="${escapeHtml(c.warrantyStart || '')}" onchange="updateCustomItemField(${item.id}, ${index}, 'warrantyStart', this.value)">
+              </div>
+              <div class="form-group">
+                <label>Warranty End</label>
+                <input type="date" value="${escapeHtml(c.warrantyEnd || '')}" onchange="updateCustomItemField(${item.id}, ${index}, 'warrantyEnd', this.value)">
+              </div>
+              ` : ''}
               <div class="form-group">
                 <label>Cost / Value</label>
                 <input type="text" class="cost-input" value="${escapeHtml(c.cost || '')}" oninput="addDollarSign(this)" onchange="updateCustomItemField(${item.id}, ${index}, 'cost', cleanCost(this))">
@@ -1926,7 +1990,7 @@
                 <button class="secondary" onclick="openIndividualDeviceModal(${item.id})">
                   ➕ Add Item for ${escapeHtml(item.name.split(' ')[0])}
                 </button>
-                <span style="font-size: 0.75rem; color: var(--text-sub);">Add Laptop, Dock, Monitor or Custom Item</span>
+                <span style="font-size: 0.75rem; color: var(--text-sub);">Add a Dock, Monitor, Headset or other item</span>
               </div>
             </div>
           </td>
@@ -2060,13 +2124,16 @@
         assetID: card.assetID || '',
         notes: card.notes || '',
         cost: card.cost || '',
+        warrantyStart: card.warrantyStart || '',
+        warrantyEnd: card.warrantyEnd || '',
         prevOwners: prevOwners
       };
     }
 
     function cardHasDetails(card) {
       const model = (card.model || '').trim();
-      return (model && model !== 'Unassigned') || (card.sn || '').trim() || (card.assetID || '').trim() || (card.notes || '').trim() || (card.cost || '').trim();
+      return (model && model !== 'Unassigned') || (card.sn || '').trim() || (card.assetID || '').trim() || (card.notes || '').trim() || (card.cost || '').trim()
+        || (card.warrantyStart || '').trim() || (card.warrantyEnd || '').trim();
     }
 
     // Asks what to do with a card that has details. Returns 'inventory', 'delete', or 'cancel'.
@@ -2084,9 +2151,10 @@
       if (!asset) return;
       const key = visibilityFlagKey.replace('show', '').toLowerCase();   // 'showLaptop' -> 'laptop'
       const card = {
-        type: STANDARD_CARD_TYPES[key], model: asset[key], sn: asset[`${key}SN`],
+        type: asset[`${key}Type`] || STANDARD_CARD_TYPES[key], model: asset[key], sn: asset[`${key}SN`],
         assetID: asset[`${key}AssetID`], notes: asset[`${key}Notes`], prevOwners: asset[`${key}PrevOwners`],
-        cost: asset[`${key}Cost`]
+        cost: asset[`${key}Cost`],
+        warrantyStart: asset[`${key}WarrantyStart`], warrantyEnd: asset[`${key}WarrantyEnd`]
       };
 
       if (cardHasDetails(card)) {
@@ -2104,6 +2172,9 @@
       asset[`${key}AssetID`] = '';
       asset[`${key}DateAssigned`] = '';
       asset[`${key}Cost`] = '';
+      asset[`${key}Type`] = '';
+      asset[`${key}WarrantyStart`] = '';
+      asset[`${key}WarrantyEnd`] = '';
       asset[`${key}Notes`] = '';
       asset[`${key}PrevOwners`] = [];
       saveData();
@@ -2115,7 +2186,7 @@
       const asset = assets.find(a => a.id === id);
       if (!asset || !asset.customItems || !asset.customItems[itemIndex]) return;
       const c = asset.customItems[itemIndex];
-      const card = { type: c.title, model: c.model, sn: c.sn, assetID: c.assetID, notes: c.notes, prevOwners: c.prevOwners, cost: c.cost };
+      const card = { type: c.title, model: c.model, sn: c.sn, assetID: c.assetID, notes: c.notes, prevOwners: c.prevOwners, cost: c.cost, warrantyStart: c.warrantyStart, warrantyEnd: c.warrantyEnd };
 
       if (cardHasDetails(card)) {
         const choice = askReturnToInventory(asset, card);
@@ -2137,13 +2208,14 @@
       Object.keys(STANDARD_CARD_TYPES).forEach(key => {
         const flag = 'show' + key.charAt(0).toUpperCase() + key.slice(1);
         if (!person[flag]) return;
-        const card = { type: STANDARD_CARD_TYPES[key], model: person[key], sn: person[`${key}SN`],
+        const card = { type: person[`${key}Type`] || STANDARD_CARD_TYPES[key], model: person[key], sn: person[`${key}SN`],
           assetID: person[`${key}AssetID`], notes: person[`${key}Notes`], prevOwners: person[`${key}PrevOwners`],
-          cost: person[`${key}Cost`] };
+          cost: person[`${key}Cost`],
+          warrantyStart: person[`${key}WarrantyStart`], warrantyEnd: person[`${key}WarrantyEnd`] };
         if (cardHasDetails(card)) cards.push(card);
       });
       (person.customItems || []).forEach(c => {
-        const card = { type: c.title, model: c.model, sn: c.sn, assetID: c.assetID, notes: c.notes, prevOwners: c.prevOwners, cost: c.cost };
+        const card = { type: c.title, model: c.model, sn: c.sn, assetID: c.assetID, notes: c.notes, prevOwners: c.prevOwners, cost: c.cost, warrantyStart: c.warrantyStart, warrantyEnd: c.warrantyEnd };
         if (cardHasDetails(card)) cards.push(card);
       });
       return cards;
@@ -2217,7 +2289,7 @@
         // If the main card for this type is hidden, bring it back.
         // If it is already showing, add a separate extra card instead
         // (this is how a person gets a 2nd laptop, 2nd monitor, etc.).
-        if (lowerTitle.includes('laptop') && !asset.showLaptop) { asset.showLaptop = true; }
+        if ((lowerTitle.includes('laptop') || lowerTitle.includes('desktop')) && !asset.showLaptop) { asset.showLaptop = true; }
         else if (lowerTitle.includes('dock') && !asset.showDock) { asset.showDock = true; }
         else if (lowerTitle.includes('monitor') && !asset.showMonitor) { asset.showMonitor = true; }
         else if (lowerTitle.includes('headset') && !asset.showHeadset) { asset.showHeadset = true; }
@@ -2275,6 +2347,8 @@
             (c.assetID && c.assetID.toLowerCase().includes(query)) ||
             (c.dateAssigned && c.dateAssigned.toLowerCase().includes(query)) ||
             (c.cost && c.cost.toLowerCase().includes(query)) ||
+            (c.warrantyStart && c.warrantyStart.includes(query)) ||
+            (c.warrantyEnd && c.warrantyEnd.includes(query)) ||
             (c.notes && c.notes.toLowerCase().includes(query)) ||
             (c.prevOwners && c.prevOwners.some(o => o.toLowerCase().includes(query)))
           );
@@ -2342,9 +2416,10 @@
         manager: document.getElementById('newPersonManager').value.trim(),
         inactive: false,
         showLaptop: true, laptop: '', laptopSN: '', laptopAssetID: '', laptopNotes: '', laptopPrevOwners: [],
-        showDock: true, dock: '', dockSN: '', dockAssetID: '', dockNotes: '', dockPrevOwners: [],
-        showMonitor: true, monitor: '', monitorSN: '', monitorAssetID: '', monitorNotes: '', monitorPrevOwners: [],
-        showHeadset: true, headset: '', headsetSN: '', headsetAssetID: '', headsetNotes: '', headsetPrevOwners: [],
+        // New employees start with only the Laptop/Desktop card; add others with "Add Item"
+        showDock: false, dock: '', dockSN: '', dockAssetID: '', dockNotes: '', dockPrevOwners: [],
+        showMonitor: false, monitor: '', monitorSN: '', monitorAssetID: '', monitorNotes: '', monitorPrevOwners: [],
+        showHeadset: false, headset: '', headsetSN: '', headsetAssetID: '', headsetNotes: '', headsetPrevOwners: [],
         customItems: []
       };
 
@@ -2443,9 +2518,9 @@
             company: '', jobTitle: '', manager: '',
             inactive: false,
             showLaptop: true, laptop: '', laptopSN: '', laptopAssetID: '', laptopNotes: '', laptopPrevOwners: [],
-            showDock: true, dock: '', dockSN: '', dockAssetID: '', dockNotes: '', dockPrevOwners: [],
-            showMonitor: true, monitor: '', monitorSN: '', monitorAssetID: '', monitorNotes: '', monitorPrevOwners: [],
-            showHeadset: true, headset: '', headsetSN: '', headsetAssetID: '', headsetNotes: '', headsetPrevOwners: [],
+            showDock: false, dock: '', dockSN: '', dockAssetID: '', dockNotes: '', dockPrevOwners: [],
+            showMonitor: false, monitor: '', monitorSN: '', monitorAssetID: '', monitorNotes: '', monitorPrevOwners: [],
+            showHeadset: false, headset: '', headsetSN: '', headsetAssetID: '', headsetNotes: '', headsetPrevOwners: [],
             customItems: []
           };
           assets.push(person);
@@ -2469,6 +2544,9 @@
         if (headsetIdx !== -1 && cols[headsetIdx]) person.headset = cols[headsetIdx];
         if (headsetSnIdx !== -1 && cols[headsetSnIdx]) person.headsetSN = cols[headsetSnIdx];
         if (headsetAssetIdx !== -1 && cols[headsetAssetIdx]) person.headsetAssetID = cols[headsetAssetIdx];
+        ['dock', 'monitor', 'headset'].forEach(k => {
+          if (person[k] || person[`${k}SN`] || person[`${k}AssetID`]) person['show' + k.charAt(0).toUpperCase() + k.slice(1)] = true;
+        });
 
         importedCount++;
       });
